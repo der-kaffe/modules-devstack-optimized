@@ -84,12 +84,12 @@ resource "libvirt_domain" "lab" {
     type_machine    = "q35"
     boot_devices    = [{ dev = "hd" }]
     firmware        = "efi"
-    loader          = "/usr/share/edk2/x64/OVMF_CODE.4m.fd"
+    loader          = "/usr/share/OVMF/OVMF_CODE_4M.fd"
     loader_readonly = "yes"
     loader_type     = "pflash"
     nv_ram = {
       nv_ram   = "/var/lib/libvirt/qemu/nvram/${var.vm_name}.fd"
-      template = "/usr/share/edk2/x64/OVMF_VARS.4m.fd"
+      template = "/usr/share/OVMF/OVMF_VARS_4M.fd"
     }
   }
 
