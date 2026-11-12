@@ -3,6 +3,14 @@ hostname: tt-openstack-lab
 manage_etc_hosts: true
 ssh_pwauth: false
 disable_root: true
+swap:
+  filename: /swapfile
+  size: 6442450944
+  maxsize: 6442450944
+packages:
+  - qemu-guest-agent
+runcmd:
+  - [systemctl, enable, --now, qemu-guest-agent]
 users:
   - name: stack
     gecos: DevStack laboratory
