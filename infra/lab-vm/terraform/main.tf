@@ -6,7 +6,21 @@ locals {
 }
 
 resource "libvirt_volume" "ubuntu_base" {
+  lifecycle {
+    prevent_destroy = true
+  }
   name = "${var.vm_name}-ubuntu2404-base.qcow2"
+  pool = local.pool
+  target = {
+    format = { type = "qcow2" }
+  }
+  create = {
+    content = { url = local.image_path }
+  }
+}
+
+resource "libvirt_volume" "ubuntu_base_clean" {
+  name = "${var.vm_name}-ubuntu2404-base-20261011T233426Z.qcow2"
   pool = local.pool
   target = {
     format = { type = "qcow2" }
@@ -25,7 +39,7 @@ resource "libvirt_volume" "system" {
     format = { type = "qcow2" }
   }
   backing_store = {
-    path   = libvirt_volume.ubuntu_base.path
+    path   = libvirt_volume.ubuntu_base_clean.path
     format = { type = "qcow2" }
   }
 }
