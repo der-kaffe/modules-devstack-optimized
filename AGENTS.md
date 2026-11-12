@@ -19,7 +19,7 @@ El Excel original conserva la planificación; el libro `Planificacion_Trabajo_Ti
 3. Implementar un cambio acotado. No ampliar rutas o microversiones sin evidencia o justificación registrada.
 4. Ejecutar `make check` y las pruebas específicas que correspondan. Una salida omitida o pendiente no cuenta como prueba aprobada.
 5. Actualizar [el registro](harness/build-log.md) con fecha, tarea, comandos, resultados y límites. Separar lo propuesto, lo implementado y lo validado contra Nova.
-6. Hacer un commit por tarea, como pidió el usuario. El push ya está autorizado en esta conversación. Conservar cambios ajenos.
+6. Hacer un commit por tarea, como pidió el usuario. Conservar cambios ajenos.
 
 Si una comprobación falla, corregir la causa; no debilitar el gate ni sustituir evidencia real por datos fabricados. Un pase de `make check` sin fuentes Go sólo verifica el harness y los artefactos existentes.
 
