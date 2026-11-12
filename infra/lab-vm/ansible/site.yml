@@ -11,15 +11,15 @@
           - ansible_facts.distribution == 'Ubuntu'
           - ansible_facts.distribution_version == '24.04'
           - ansible_facts.processor_vcpus | int >= 4
-          - ansible_facts.memtotal_mb | int >= 5859
+          - ansible_facts.memtotal_mb | int >= 6835
           - ansible_facts.virtualization_role == 'guest'
-        fail_msg: The VM does not meet the local Ubuntu 24.04 / 4 vCPU / 6 GiB laboratory profile (at least 6000000 KiB visible).
+        fail_msg: The VM does not meet the local Ubuntu 24.04 / 4 vCPU / 7 GiB laboratory profile (at least 7000000 KiB visible).
 
     - name: Wait until cloud-init finishes package setup
       ansible.builtin.command: cloud-init status --wait
       changed_when: false
 
-    - name: Require persistent active six GiB swap before provisioning
+    - name: Require persistent active seven GiB swap before provisioning
       ansible.builtin.command:
         argv:
           - python3
@@ -27,10 +27,10 @@
           - |
             import os
             rows = [line.split() for line in open('/proc/swaps').readlines()[1:]]
-            assert os.stat('/swapfile').st_size == 6442450944
-            assert any(r[0] == '/swapfile' and int(r[2]) * 1024 >= 6442450944 - 4096 for r in rows)
+            assert os.stat('/swapfile').st_size == 7516192768
+            assert any(r[0] == '/swapfile' and int(r[2]) * 1024 >= 7516192768 - 4096 for r in rows)
             assert any('/swapfile' in line and 'swap' in line for line in open('/etc/fstab'))
-            print('Persistent six GiB swap is active')
+            print('Persistent seven GiB swap is active')
       changed_when: false
 
   tasks:
@@ -113,7 +113,7 @@
             original = subprocess.check_output(['git', '-C', str(root), 'show', 'HEAD:' + relative])
             old = next(line for line in original.splitlines(keepends=True) if b'/MemTotal/' in line)
             assert b'8000000' in old and b'8 GiB' in old
-            new = old.replace(b'8000000', b'6000000').replace(b'8 GiB', b'6 GiB')
+            new = old.replace(b'8000000', b'7000000').replace(b'8 GiB', b'7 GiB')
             path = root / relative
             assert path.read_bytes() == original
             path.write_bytes(original.replace(old, new))
@@ -123,7 +123,7 @@
             assert 'NOVA_BRANCH=@NOVA_SHA@' in (root / 'infra/devstack/local.conf.template').read_text()
             subprocess.run(['bash', str(root / 'tests/compatibility/nova_pin.sh')], check=True)
             subprocess.run(['bash', '-n', str(path)], check=True)
-            print('Exact fork revision verified; only memory preflight changed: 8000000 -> 6000000 KiB')
+            print('Exact fork revision verified; only memory preflight changed: 8000000 -> 7000000 KiB')
           - "{{ repo_revision }}"
       become_user: stack
 
