@@ -5,7 +5,7 @@ variable "vm_name" {
 
 variable "memory_mib" {
   type    = number
-  default = 6144
+  default = 7168
   validation {
     condition     = var.memory_mib >= 4096
     error_message = "DevStack requiere al menos 4096 MiB asignados a la VM."
