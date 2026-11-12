@@ -92,7 +92,7 @@
       ansible.builtin.git:
         repo: https://github.com/der-kaffe/modules-devstack-optimized.git
         dest: /home/stack/modules-devstack-optimized
-        version: bbe1d2bdc1aff51a8ee0b6534d5830bee47df00a
+        version: "{{ repo_revision }}"
         update: true
         force: true
       become_user: stack
@@ -103,12 +103,12 @@
           - python3
           - -c
           - |
-            import pathlib, subprocess
+            import pathlib, subprocess, sys
             root = pathlib.Path('/home/stack/modules-devstack-optimized')
             def git(*args):
                 return subprocess.check_output(['git', '-C', str(root), *args], text=True).strip()
             assert git('remote', 'get-url', 'origin') == 'https://github.com/der-kaffe/modules-devstack-optimized.git'
-            assert git('rev-parse', 'HEAD') == 'bbe1d2bdc1aff51a8ee0b6534d5830bee47df00a'
+            assert git('rev-parse', 'HEAD') == sys.argv[1]
             relative = 'infra/devstack/setup-devstack.sh'
             original = subprocess.check_output(['git', '-C', str(root), 'show', 'HEAD:' + relative])
             old = next(line for line in original.splitlines(keepends=True) if b'/MemTotal/' in line)
@@ -124,6 +124,7 @@
             subprocess.run(['bash', str(root / 'tests/compatibility/nova_pin.sh')], check=True)
             subprocess.run(['bash', '-n', str(path)], check=True)
             print('Exact fork revision verified; only memory preflight changed: 8000000 -> 6000000 KiB')
+          - "{{ repo_revision }}"
       become_user: stack
 
     - name: Generate unique DevStack credentials once
