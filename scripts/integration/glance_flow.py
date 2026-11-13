@@ -44,6 +44,8 @@ def route(path):
         return '/'
     if path == '/v2/images':
         return '/v2/images'
+    if re.fullmatch(r'/v2/schemas/[a-z-]+', path):
+        return '/v2/schemas/{name}'
     match = re.fullmatch(r'/v2/images/' + UUID + r'(/file)?', path)
     if match:
         return '/v2/images/{id}' + (match.group(1) or '')
@@ -182,8 +184,13 @@ def correlate(go, calls, requests, apache=()):
 
 
 def same_route(go_route, apache_route):
-    # Glance Go logs version discovery ("/") as "unmatched" by design.
-    return go_route == apache_route or (go_route == 'unmatched' and apache_route == '/')
+    # Older Glance Go binaries logged discovery and schemas as "unmatched".
+    return go_route == apache_route or (go_route == 'unmatched' and apache_route in ('/', '/v2/schemas/{name}'))
+
+
+def within(events, since_us, until_us):
+    """journalctl filters by whole seconds: apply the exact window afterwards."""
+    return [e for e in events if since_us <= e['ts_us'] <= until_us]
 
 
 def is_nova(caller):
@@ -247,8 +254,8 @@ def journal(units, since_us, until_us):
 
 def collect(go_unit, since_us, until_us, image_size, apache_log=Path('/var/log/apache2/horizon_access.log')):
     """Live collection inside the VM. Returns a sanitized, self-contained record."""
-    go = go_events(journal([go_unit], since_us, until_us))
-    calls, requests = nova_events(journal(NOVA_UNITS, since_us, until_us))
+    go = within(go_events(journal([go_unit], since_us, until_us)), since_us, until_us)
+    calls, requests = (within(e, since_us, until_us) for e in nova_events(journal(NOVA_UNITS, since_us, until_us)))
     try:
         lines = subprocess.run(['sudo', '-n', 'tail', '-n', '20000', str(apache_log)],
                                check=True, capture_output=True, text=True).stdout.splitlines()

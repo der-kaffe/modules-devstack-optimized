@@ -48,6 +48,15 @@ from placement_suite import exclusive_run, require, save_json, sdk_connection  #
 PLACEMENT_CONTROL = ('placement-before', 'placement-after')
 
 
+def without_generations(value):
+    if isinstance(value, dict):
+        return {k: without_generations(v) for k, v in value.items()
+                if k not in ('generation', 'resource_provider_generation')}
+    if isinstance(value, list):
+        return [without_generations(v) for v in value]
+    return value
+
+
 def placement_control_ok(report):
     return (bool(report.get('providers')) and report.get('flat_providers') is True
             and report.get('no_sharing') is True)
@@ -211,8 +220,13 @@ class Suite(Session):
         with contextlib.redirect_stdout(stream):
             module.run(SimpleNamespace(allow_mutations=True, **values))
         (self.args.output / (label + '.log')).write_text(stream.getvalue())
-        report = json.loads((values['output'] / 'report.json').read_text())
+        path = values['output'] / 'report.json'
+        report = json.loads(path.read_text())
         require(placement_control_ok(report), label + ' read-only control')
+        # Nova's claim and release of the test server legitimately bump provider
+        # generations; compare resources, inventories, traits and allocations.
+        path.rename(path.with_name('report.raw.json'))
+        save_json(path, without_generations(report))
 
     def case(self, name):
         started = time.monotonic()
@@ -293,7 +307,7 @@ class Suite(Session):
         require(network.id == self.args.network_id and int(flavor.vcpus) >= 1, 'flavor/network preflight')
         self.server_name = self.report['run_id']
         require(not list(self.connection.compute.servers(name=self.server_name, all_projects=True)), 'fresh server name')
-        since = time.time_ns() // 1000 - 1_000_000
+        since = time.time_ns() // 1000  # exact: the suite's own Glance calls end before this
         server = self.connection.compute.create_server(name=self.server_name, image_id=self.nova_image['id'],
                                                       flavor_id=self.args.flavor_id,
                                                       networks=[{'uuid': self.args.network_id}])

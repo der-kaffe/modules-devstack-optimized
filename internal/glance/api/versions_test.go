@@ -94,3 +94,14 @@ func TestOtherRootMethodsStayAuthenticated(t *testing.T) {
 		t.Fatalf("unknown authenticated route: %d", w.Code)
 	}
 }
+
+func TestLogRouteNamesDiscoveryAndSchemas(t *testing.T) {
+	for path, want := range map[string]string{
+		"/": "/", "/versions": "/versions", "/v2/schemas/image": "/v2/schemas/{name}",
+		"/v2/schemas/a/b": "unmatched", "/v2/other": "unmatched",
+	} {
+		if got := logRoute(path); got != want {
+			t.Fatalf("logRoute(%q) = %q, want %q", path, got, want)
+		}
+	}
+}
