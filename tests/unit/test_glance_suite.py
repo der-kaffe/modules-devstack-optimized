@@ -164,6 +164,29 @@ class SuiteGuardTests(unittest.TestCase):
         report['cases']['nova_glance_flow']['passed'] = False
         self.assertFalse(suite.suite_passed(report))
 
+    def test_placement_is_a_read_only_control_not_an_empty_lab_gate(self):
+        base = {'providers': [{'allocations': {'allocations': {'other-server': {}}}}],
+                'flat_providers': True, 'no_sharing': True, 'no_provider_allocations': False}
+        self.assertTrue(suite.placement_control_ok(base))
+        self.assertFalse(suite.placement_control_ok({**base, 'providers': []}))
+        self.assertFalse(suite.placement_control_ok({**base, 'no_sharing': False}))
+
+    def test_placement_control_action_records_log_and_does_not_mutate(self):
+        class FakePreflight:
+            @staticmethod
+            def run(values):
+                values.output.mkdir()
+                (values.output / 'report.json').write_text(json.dumps(
+                    {'providers': [{}], 'flat_providers': True, 'no_sharing': True, 'no_provider_allocations': False}))
+                print('{"no_allocations": false}')
+                return 1  # the campaign gate would fail; the Glance control must not
+        with tempfile.TemporaryDirectory() as folder:
+            out = Path(folder)
+            fake = suite.Suite.__new__(suite.Suite)
+            fake.args = SimpleNamespace(output=out)
+            fake.action('placement-before', FakePreflight, url='x', token_file=out / 't', output=out / 'placement-before')
+            self.assertIn('no_allocations', (out / 'placement-before.log').read_text())
+
     def test_server_image_id_accepts_sdk_shapes(self):
         self.assertEqual(suite.server_image_id(SimpleNamespace(image={'id': IMAGE})), IMAGE)
         self.assertEqual(suite.server_image_id(SimpleNamespace(image=SimpleNamespace(id=IMAGE))), IMAGE)
