@@ -16,7 +16,7 @@ orden. Se detiene al primer fallo y la limpieza corre siempre:
 
 | # | Caso | Qué acredita |
 |---|------|--------------|
-| 1 | `preflight_and_isolation` | Controles de mantenimiento, identidad propia, snapshot del catálogo original, Placement de control, MySQL y store Go propios. |
+| 1 | `preflight_and_isolation` | Controles de mantenimiento, identidad propia, snapshot del catálogo original, MySQL y store Go propios. Placement se lee (sólo lectura) como control de no interferencia: se aceptan allocations preexistentes, pero el estado final debe ser igual al inicial. |
 | 2 | `auth_fail_closed` | Go responde 401 sin token y con token inválido; el original también responde 401 como referencia. |
 | 3 | `not_found` | GET de un UUID nuevo devuelve 404. |
 | 4 | `catalog_and_bytes_direct` | Ciclo completo contra Go directo: 404 → POST → PUT → active con tamaño/MD5/SHA-512 → GET verificando SHA-256 → PATCH → DELETE → 404. |

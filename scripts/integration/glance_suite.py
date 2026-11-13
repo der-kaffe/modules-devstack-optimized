@@ -13,7 +13,9 @@ explicit flavor/network IDs. Never starts the VM, never writes SQL to the
 original Glance database and never touches the original store.
 """
 import argparse
+import contextlib
 import datetime
+import io
 import hashlib
 import json
 import logging
@@ -22,6 +24,7 @@ import re
 import shutil
 import sys
 import time
+from types import SimpleNamespace
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 import uuid
@@ -31,7 +34,19 @@ sys.path[:0] = [str(HERE), str(HERE.parent / 'benchmarks'), str(HERE.parent)]
 import glance_flow  # noqa: E402
 import glance_switch  # noqa: E402
 from glance_preflight import Session  # noqa: E402
+import lab_identity  # noqa: E402
+# Shared lab helper despite its historical name: it builds the *Glance* Go runtime.
+import placement_runtime  # noqa: E402
 from placement_suite import exclusive_run, require, save_json, sdk_connection  # noqa: E402
+
+# Placement is read before/after only as a non-interference control (Nova must
+# release what the test server reserved). Pre-existing allocations are allowed.
+PLACEMENT_CONTROL = ('placement-before', 'placement-after')
+
+
+def placement_control_ok(report):
+    return (bool(report.get('providers')) and report.get('flat_providers') is True
+            and report.get('no_sharing') is True)
 
 GO_URL = 'http://127.0.0.1:19293'  # fixed by glance_preflight.Session.prepare
 MIB = 1024**2
@@ -104,6 +119,19 @@ class Suite(Session):
 
     def checkpoint(self):
         save_json(self.args.output / 'report.json', self.report)
+
+    def action(self, label, module, **values):
+        if label not in PLACEMENT_CONTROL:
+            return super().action(label, module, **values)
+        # Read-only snapshot; its "no allocations" requirement belongs to the
+        # Placement campaigns, not to a Glance test. Equality before/after is
+        # still enforced by Session.cleanup.
+        stream = io.StringIO()
+        with contextlib.redirect_stdout(stream):
+            module.run(SimpleNamespace(allow_mutations=True, **values))
+        (self.args.output / (label + '.log')).write_text(stream.getvalue())
+        report = json.loads((values['output'] / 'report.json').read_text())
+        require(placement_control_ok(report), label + ' read-only control')
 
     def case(self, name):
         started = time.monotonic()
@@ -239,11 +267,39 @@ class Suite(Session):
             self.delete_server()
         except Exception as error:  # keep going: route/runtime must still be restored
             server_error = type(error).__name__
-        result = super().cleanup()
+        try:
+            result = super().cleanup()
+        except Exception as error:
+            # Session.cleanup stops at its first failed check; never leave the
+            # lab half-restored: retire own runtime, identity and controls anyway.
+            result = {'error': type(error).__name__,
+                      'reason': str(error) if isinstance(error, AssertionError) else None,
+                      **self.fallback_cleanup()}
         result['server_removed'] = server_error is None and self.server is None
         if server_error:
             result['server_error'] = server_error
         return result
+
+    def fallback_cleanup(self):
+        done = {}
+        steps = [('route_restored', self.restore_route),
+                 ('runtime_removed', lambda: self.runtime.exists() and self.action(
+                     'runtime-cleanup', placement_runtime, action='cleanup', root=self.runtime)),
+                 ('identity_removed', lambda: self.auth.exists() and self.action(
+                     'identity-cleanup', lab_identity, action='cleanup', private_root=self.auth)),
+                 ('controls_restored', lambda: self.controls('restore')['controls_restored'] or
+                  require(False, 'controls restore'))]
+        for name, step in steps:
+            try:
+                step()
+                done[name] = True
+            except Exception as error:
+                done[name] = False
+                done[name + '_error'] = type(error).__name__
+        done['runtime_removed'] = done['runtime_removed'] and not self.runtime.exists()
+        done['identity_removed'] = done['identity_removed'] and not self.auth.exists()
+        done['fallback'] = True
+        return done
 
     def execute(self):
         try:
