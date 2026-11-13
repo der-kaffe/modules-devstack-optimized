@@ -153,6 +153,9 @@ func logRoute(path string) string {
 	if path == "/v2/images" || path == "/" || path == "/versions" {
 		return path
 	}
+	if rest, ok := strings.CutPrefix(path, "/v2/schemas/"); ok && rest != "" && !strings.Contains(rest, "/") {
+		return "/v2/schemas/{name}"
+	}
 	if rest, ok := strings.CutPrefix(path, "/v2/images/"); ok && strings.HasSuffix(rest, "/file") {
 		id := strings.TrimSuffix(rest, "/file")
 		if id != "" && !strings.Contains(id, "/") {

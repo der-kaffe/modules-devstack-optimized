@@ -131,7 +131,16 @@ class FlowAcceptanceTests(unittest.TestCase):
 
     def test_go_discovery_route_pairs_with_apache_root(self):
         self.assertTrue(flow.same_route('unmatched', '/'))
+        self.assertTrue(flow.same_route('unmatched', '/v2/schemas/{name}'))
         self.assertFalse(flow.same_route('unmatched', '/v2/images'))
+        self.assertEqual(flow.route('/image/v2/schemas/image'), '/v2/schemas/{name}')
+
+    def test_exact_window_drops_the_suite_calls_just_before_the_boot(self):
+        # First real run: journalctl's whole-second filter let the suite's own
+        # upload, ~1 s before create_server, into the Nova window.
+        events = flow.go_events(GO)
+        kept = flow.within(events, T0 + 3_000_000, T0 + 5_000_000)
+        self.assertEqual([e['request_id'] for e in kept], [RID_META, RID_FILE])
 
 
 class SuiteGuardTests(unittest.TestCase):
@@ -186,6 +195,16 @@ class SuiteGuardTests(unittest.TestCase):
             fake.args = SimpleNamespace(output=out)
             fake.action('placement-before', FakePreflight, url='x', token_file=out / 't', output=out / 'placement-before')
             self.assertIn('no_allocations', (out / 'placement-before.log').read_text())
+
+    def test_placement_generations_are_not_a_side_effect(self):
+        before = {'providers': [{'provider': {'uuid': 'p', 'generation': 11},
+                                 'inventories': {'resource_provider_generation': 11, 'inventories': {'VCPU': {'total': 4}}},
+                                 'allocations': {'resource_provider_generation': 11, 'allocations': {'old': {}}}}]}
+        after = json.loads(json.dumps(before).replace('11', '12'))
+        self.assertNotEqual(before, after)
+        self.assertEqual(suite.without_generations(before), suite.without_generations(after))
+        changed = json.loads(json.dumps(after).replace('"old"', '"leaked"'))
+        self.assertNotEqual(suite.without_generations(before), suite.without_generations(changed))
 
     def test_server_image_id_accepts_sdk_shapes(self):
         self.assertEqual(suite.server_image_id(SimpleNamespace(image={'id': IMAGE})), IMAGE)
