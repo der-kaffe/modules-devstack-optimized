@@ -1022,3 +1022,10 @@ Revalidación del 28/10/2026: se ejecutó `GOMAXPROCS=2 GOTOOLCHAIN=local make c
   Hallazgo: `Filesystem.Open` relee y hashea el objeto antes del primer byte, lo
   que es coherente con el TTFB y la CPU de las descargas de 16/64 MiB en v3.
   [Proyección](../docs/glance/ceph-rbd-projection.md).
+- Primera corrida real (VM local, 6 GiB): pasan 7/10 casos. Nova falla al crear
+  el servidor (HTTP 500, `MissingAuthPlugin`): keystoneauth necesita el
+  descubrimiento de versiones de `/image/`, y Glance Go no lo tenía (respondía
+  401). Se implementa en Go `GET|HEAD /` (300) y `/versions` (200) públicos,
+  idénticos a la captura original de Sprint 2; los tests Go lo comparan con
+  `evidence/sprint2/glance/versions.response.json`. Se quita también de la suite
+  la exigencia de cero allocations del control de Placement (ahora sólo lectura).

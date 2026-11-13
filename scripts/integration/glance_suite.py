@@ -65,12 +65,12 @@ def suite_passed(report):
             and cleanup.get('pending_images') == 0)
 
 
-def unauthenticated_status(url, token=None):
+def unauthenticated_status(url, token=None, path='/v2/images'):
     headers = {'User-Agent': glance_flow.SUITE_AGENT}
     if token is not None:
         headers['X-Auth-Token'] = token
     try:
-        with urlopen(Request(url.rstrip('/') + '/v2/images', headers=headers), timeout=10) as response:
+        with urlopen(Request(url.rstrip('/') + path, headers=headers), timeout=10) as response:
             return response.status
     except HTTPError as error:
         try:
@@ -155,9 +155,13 @@ class Suite(Session):
         bogus = 'tt-invalid-' + uuid.uuid4().hex
         observed = {'go_missing_token': unauthenticated_status(GO_URL),
                     'go_invalid_token': unauthenticated_status(GO_URL, bogus),
-                    'python_missing_token': unauthenticated_status(self.args.url)}
+                    'python_missing_token': unauthenticated_status(self.args.url),
+                    # Version discovery is public in both (Nova needs it first).
+                    'go_discovery': unauthenticated_status(GO_URL, path='/'),
+                    'python_discovery': unauthenticated_status(self.args.url, path='/')}
         require(observed['go_missing_token'] == observed['go_invalid_token'] == 401, 'Go rejects missing/invalid token')
         require(observed['python_missing_token'] == 401, 'original reference also answers 401')
+        require(observed['go_discovery'] == observed['python_discovery'] == 300, 'public version discovery like the original')
         return observed
 
     def case_not_found(self):
