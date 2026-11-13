@@ -19,8 +19,10 @@ import io
 import hashlib
 import json
 import logging
+import os
 from pathlib import Path
 import re
+import secrets
 import shutil
 import sys
 import time
@@ -35,6 +37,8 @@ import glance_flow  # noqa: E402
 import glance_switch  # noqa: E402
 from glance_preflight import Session  # noqa: E402
 import lab_identity  # noqa: E402
+from placement_differential import read_token  # noqa: E402
+import placement_preflight  # noqa: E402
 # Shared lab helper despite its historical name: it builds the *Glance* Go runtime.
 import placement_runtime  # noqa: E402
 from placement_suite import exclusive_run, require, save_json, sdk_connection  # noqa: E402
@@ -54,7 +58,7 @@ CASES = ('preflight_and_isolation', 'auth_fail_closed', 'not_found', 'catalog_an
          'route_go_public', 'catalog_and_bytes_public', 'image_for_nova', 'nova_boot_from_go',
          'nova_glance_flow', 'server_and_image_removed')
 CLEANUP = ('original_unchanged', 'runtime_removed', 'identity_removed', 'private_root_removed',
-           'controls_restored')
+           'controls_restored', 'server_removed', 'service_validator_removed')
 
 
 def suite_passed(report):
@@ -116,9 +120,86 @@ class Suite(Session):
         self.server_name = None
         self.nova_image = None
         self.window = None
+        self.validator = None
 
     def checkpoint(self):
         save_json(self.args.output / 'report.json', self.report)
+
+    def prepare(self):
+        # As in Session.prepare, plus a production-like validator: Glance Go only
+        # accepts Nova's X-Service-Token from its own service project (see
+        # docs/glance/composite-auth.md), and in DevStack that project is
+        # 'service'. The lab identity's own project would make Go answer 403.
+        save_json(self.args.output / 'controls-before.json', self.controls('enter'))
+        self.action('identity-prepare', lab_identity, action='prepare', private_root=self.auth,
+                    application_lifetime_hours=24)
+        self.token = read_token(self.auth / 'admin.token')
+        metadata = json.loads((self.auth / 'metadata.json').read_text())
+        self.owner, self.tag = metadata['project'], 'tt-glance-preflight-' + uuid.uuid4().hex
+        self.original = self.snapshot()
+        save_json(self.args.output / 'original-before.json', self.original)
+        self.action('placement-before', placement_preflight, url='http://192.168.122.10/placement',
+                    token_file=self.auth / 'service.token', output=self.args.output / 'placement-before')
+        self.service_validator()
+        self.action('glance-runtime', placement_runtime, action='prepare', domain='glance', root=self.runtime,
+                    binary=self.args.binary, auth_root=self.auth, mysql_port=13317, listen_port=19293,
+                    public_url=self.args.url, keystone_url='http://192.168.122.10/identity/v3')
+        save_json(self.args.output / 'runtime.json', json.loads((self.runtime / 'public-report.json').read_text()))
+
+    def keystone_admin(self):
+        from keystoneauth1 import session
+        from keystoneauth1.identity import v3
+        from keystoneclient.v3 import client
+        url = os.environ['OS_AUTH_URL'].rstrip('/')
+        url = url if url.endswith('/v3') else url + '/v3'
+        plugin = v3.Password(auth_url=url, username=os.environ['OS_USERNAME'], password=os.environ['OS_PASSWORD'],
+                             project_name=os.environ['OS_PROJECT_NAME'],
+                             user_domain_name=os.environ.get('OS_USER_DOMAIN_NAME', 'Default'),
+                             project_domain_name=os.environ.get('OS_PROJECT_DOMAIN_NAME', 'Default'))
+        return client.Client(session=session.Session(auth=plugin, timeout=15)), url
+
+    def service_validator(self):
+        from keystoneauth1 import session
+        from keystoneauth1.identity import v3
+        from keystoneclient.v3 import client
+        admin, url = self.keystone_admin()
+        projects = admin.projects.list(name='service')
+        require(len(projects) == 1, 'exactly one DevStack service project')
+        domain = admin.domains.list(name='Default')[0].id
+        name, password = 'tt-placement-glance-' + secrets.token_hex(6), secrets.token_urlsafe(32)
+        user = admin.users.create(name, domain=domain, password=password, default_project=projects[0].id)
+        self.validator = {'id': user.id, 'name': name}
+        self.report['service_validator'] = {'name': name, 'project': 'service', 'roles': ['service']}
+        self.checkpoint()
+        role = [r for r in admin.roles.list() if r.name == 'service'][0]
+        admin.roles.grant(role.id, user=user.id, project=projects[0].id)
+        own = client.Client(session=session.Session(
+            auth=v3.Password(auth_url=url, user_id=user.id, password=password, project_id=projects[0].id), timeout=15))
+        expiry = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=24)
+        app = own.application_credentials.create(name='glance-validator', user=user.id,
+                                                 roles=[{'name': 'service'}], expires_at=expiry)
+        path = self.auth / 'validator.json'
+        path.write_text(json.dumps({'application_credential_id': app.id, 'application_credential_secret': app.secret}))
+        path.chmod(0o600)
+
+    def remove_service_validator(self):
+        if not getattr(self, 'validator', None):
+            return True
+        from keystoneclient import exceptions
+        admin, _ = self.keystone_admin()
+        try:
+            user = admin.users.get(self.validator['id'])
+            require(user.name == self.validator['name'] and user.name.startswith('tt-placement-glance-'),
+                    'validator ownership')
+            admin.users.delete(user.id)  # also revokes its application credential
+        except exceptions.NotFound:
+            pass
+        try:
+            admin.users.get(self.validator['id'])
+            return False
+        except exceptions.NotFound:
+            self.validator = None
+            return True
 
     def action(self, label, module, **values):
         if label not in PLACEMENT_CONTROL:
@@ -282,6 +363,12 @@ class Suite(Session):
         result['server_removed'] = server_error is None and self.server is None
         if server_error:
             result['server_error'] = server_error
+        # Last: Go needed this credential while its own images were being removed.
+        try:
+            result['service_validator_removed'] = self.remove_service_validator()
+        except Exception as error:
+            result['service_validator_removed'] = False
+            result['service_validator_error'] = type(error).__name__
         return result
 
     def fallback_cleanup(self):
@@ -322,7 +409,7 @@ class Suite(Session):
                 if self.connection is not None:
                     self.connection.close()
             self.report['request_cases'] = self.cases
-            self.report['passed'] = suite_passed(self.report) and self.report['cleanup'].get('server_removed') is True
+            self.report['passed'] = suite_passed(self.report)
             self.report['finished_utc'] = datetime.datetime.now(datetime.timezone.utc).isoformat()
             self.checkpoint()
         print(json.dumps({'run_id': self.report['run_id'], 'passed': self.report['passed'],
