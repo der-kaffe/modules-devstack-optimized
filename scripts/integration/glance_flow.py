@@ -29,6 +29,7 @@ REQ = re.compile(r'REQ: curl .*?-X (GET|HEAD|POST|PUT|PATCH|DELETE) (\S+)(.*)$')
 APACHE = re.compile(r'^\S+ \S+ \S+ \[([^\]]+)\] "(GET|HEAD|POST|PUT|PATCH|DELETE|OPTIONS) (\S+) HTTP/[0-9.]+" (\d{3}) (\d+|-)'
                     r'(?: "[^"]*" "([^"]*)")?')
 SUITE_AGENT = 'tt-glance-suite'
+NOVA_AGENTS = ('nova', 'openstack-client')
 
 
 def route(path):
@@ -113,7 +114,7 @@ def _header(headers, name):
 
 
 def agent_class(agent):
-    agent = agent or ''
+    agent = '' if agent in (None, '-') else agent
     if SUITE_AGENT in agent:
         return 'suite'
     if 'nova' in agent.lower():
@@ -165,14 +166,20 @@ def correlate(go, calls, requests, apache=()):
             presence = _nearest_request(call, requests)
             service_token = presence['x_service_token'] if presence else None
         else:
-            for index, line in enumerate(pool):
-                if (index not in used and line['method'] == event['method'] and same_route(event['route'], line['route'])
-                        and line['status'] == event['status'] and abs(line['ts_us'] - event['ts_us']) <= 2_000_000):
-                    used.add(index)
-                    cls = line['user_agent_class']
-                    caller = 'nova' if cls in ('nova', 'openstack-client') else cls
-                    how = 'apache'
-                    break
+            # Apache has second resolution, so a request of the suite made just
+            # before the window can share the second with Nova's identical one.
+            # Prefer OpenStack-client lines, then the closest in time.
+            candidates = [index for index, line in enumerate(pool)
+                          if index not in used and line['method'] == event['method']
+                          and same_route(event['route'], line['route']) and line['status'] == event['status']
+                          and abs(line['ts_us'] - event['ts_us']) <= 2_000_000]
+            if candidates:
+                index = min(candidates, key=lambda i: (pool[i]['user_agent_class'] not in NOVA_AGENTS,
+                                                       abs(pool[i]['ts_us'] - event['ts_us'])))
+                used.add(index)
+                cls = pool[index]['user_agent_class']
+                caller = 'nova' if cls in NOVA_AGENTS else cls
+                how = 'apache'
         timeline.append({'ts_us': event['ts_us'], 'caller': caller, 'attribution': how,
                          'method': event['method'], 'route': event['route'], 'status': event['status'],
                          'response_bytes': event['response_bytes'], 'glance_duration_ms': event['duration_ms'],
