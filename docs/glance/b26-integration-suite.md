@@ -1,13 +1,14 @@
 # B26 — suite automática de integración Glance Go
 
-Estado (2026-11-12): **suite implementada y probada sólo offline**. Las pruebas
-unitarias (`tests/unit/test_glance_suite.py`) cubren guardas, parseo de logs,
-correlación y criterio de aceptación. **Todavía no hay una corrida real en el
-laboratorio**: hasta tenerla, este documento no acredita B26 ni el boot de Nova
-desde Glance Go. El Excel marca B26 como Hecho, pero el repositorio no conserva
-evidencia de ese boot (ver
-[preflight v2](../../evidence/sprint5/benchmarks/glance-v2-functional-preflight-20261031/README.md):
-"no valida un boot Nova nuevo"). Esta suite existe para cerrar esa brecha.
+Estado (2026-11-12): **dos corridas reales consecutivas aprobadas (10/10 casos,
+limpieza completa)** en la VM local. Nova llegó a ACTIVE en 4,8 s y 4,4 s desde
+una imagen CirrOS que sólo existía en Glance Go.
+[Evidencia y flujo observado](../../evidence/sprint5/glance-b26-suite-20261112/README.md).
+Para llegar ahí hubo que portar a Go el descubrimiento de versiones público, que
+Nova necesita, y dar a Go su credencial de servicio en el proyecto `service`.
+Las pruebas offline están en `tests/unit/test_glance_suite.py`. Antes de esto,
+el repositorio no conservaba evidencia de un boot desde Glance Go (ver
+[preflight v2](../../evidence/sprint5/benchmarks/glance-v2-functional-preflight-20261031/README.md)).
 
 ## Qué ejecuta
 
@@ -16,7 +17,7 @@ orden. Se detiene al primer fallo y la limpieza corre siempre:
 
 | # | Caso | Qué acredita |
 |---|------|--------------|
-| 1 | `preflight_and_isolation` | Controles de mantenimiento, identidad propia, snapshot del catálogo original, MySQL y store Go propios. Placement se lee (sólo lectura) como control de no interferencia: se aceptan allocations preexistentes, pero el estado final debe ser igual al inicial. |
+| 1 | `preflight_and_isolation` | Controles de mantenimiento, identidad propia, snapshot del catálogo original, MySQL y store Go propios, y un validador temporal de Go en el proyecto `service` (ahí también está el usuario de servicio de Nova). Placement se lee (sólo lectura) como control de no interferencia: se aceptan allocations preexistentes, pero el estado final debe ser igual al inicial, sin contar `generation`. |
 | 2 | `auth_fail_closed` | Go responde 401 sin token y con token inválido, y el descubrimiento de versiones (`GET /`) es público (300) como en el original: Nova lo necesita antes de cualquier llamada. |
 | 3 | `not_found` | GET de un UUID nuevo devuelve 404. |
 | 4 | `catalog_and_bytes_direct` | Ciclo completo contra Go directo: 404 → POST → PUT → active con tamaño/MD5/SHA-512 → GET verificando SHA-256 → PATCH → DELETE → 404. |
