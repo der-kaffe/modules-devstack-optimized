@@ -153,6 +153,14 @@ PLACEMENT_INTEGRATION_ARGS ?=
 placement-integration:
 	python3 scripts/integration/placement_suite.py $(PLACEMENT_INTEGRATION_ARGS)
 
+# Explicit live lab command (B26), inside the VM with admin openrc and deployed SDKs:
+# Go contract, reversible /image substitution, Nova boot from a Go-only image and
+# Nova→Glance flow capture. Usage: docs/glance/b26-integration-suite.md.
+.PHONY: glance-integration
+GLANCE_INTEGRATION_ARGS ?=
+glance-integration:
+	python3 scripts/integration/glance_suite.py $(GLANCE_INTEGRATION_ARGS)
+
 # Explicit live host campaign; VM/SDK/code deployment must already be prepared.
 .PHONY: placement-benchmark
 PLACEMENT_BENCHMARK_ARGS ?=

@@ -1004,3 +1004,21 @@ Revalidación del 28/10/2026: se ejecutó `GOMAXPROCS=2 GOTOOLCHAIN=local make c
 - Datos independientes, n=3 mediana/rango; no atribución exclusiva al lenguaje.
 - Resultado reproducible en docs/benchmarks/glance-results.md y evidencia de esta campaña.
 - Campaña conjunta postergada por el usuario; no se ejecutó.
+
+
+### 2026-11-12 — B26: suite automática Glance Go, captura Nova→Glance y proyección RBD
+
+- Nueva suite `scripts/integration/glance_suite.py` (`make glance-integration`).
+  Tiene 10 casos fail-fast: contrato Go, sustitución reversible de `/image`, imagen
+  CirrOS sólo en Go, boot Nova y flujo capturado. La limpieza obligatoria impide
+  un pase parcial. [Uso y límites](../docs/glance/b26-integration-suite.md).
+- Captura `scripts/integration/glance_flow.py`: journald Go (request_id) ↔
+  keystoneauth Nova (request id, presencia de X-Service-Token), con Apache como
+  respaldo; saneada. [Método](../docs/glance/nova-glance-flow.md).
+- Verificado sólo offline: `python3 -m unittest discover -s tests/unit` con 89 OK
+  (13 nuevos), py_compile y `--help`. **Sin corrida en laboratorio**: B26 y el
+  boot Nova desde Glance Go siguen sin evidencia en el repositorio.
+- Proyección de diseño y esfuerzo (≈24 SP) de un store Ceph RBD; no implementado.
+  Hallazgo: `Filesystem.Open` relee y hashea el objeto antes del primer byte, lo
+  que es coherente con el TTFB y la CPU de las descargas de 16/64 MiB en v3.
+  [Proyección](../docs/glance/ceph-rbd-projection.md).
