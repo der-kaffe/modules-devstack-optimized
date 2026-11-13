@@ -120,6 +120,16 @@ class FlowAcceptanceTests(unittest.TestCase):
         self.assertIsNone(summary['composite_auth_seen'])  # unknown, not False
         self.assertTrue(flow.flow_accepted(summary))
 
+    def test_same_second_tie_prefers_the_openstack_client_line(self):
+        # Real run: the suite's GET (UA "-") and nova-api's GET shared 02:21:34.
+        go = flow.go_events([go_line(T0 + 400_000, RID_API, 'GET', '/v2/images/{id}', 200, 812)])
+        line = {'method': 'GET', 'route': '/v2/images/{id}', 'status': 200}
+        apache = [{**line, 'ts_us': T0, 'user_agent_class': flow.agent_class('-')},
+                  {**line, 'ts_us': T0, 'user_agent_class': flow.agent_class('python-glanceclient')}]
+        timeline = flow.correlate(go, [], [], apache)
+        self.assertEqual(timeline[0]['caller'], 'nova')
+        self.assertEqual(flow.agent_class('-'), 'unknown')
+
     def test_partial_download_or_foreign_traffic_is_not_a_pass(self):
         calls, requests = flow.nova_events(NOVA)
         short = flow.go_events(GO[:2] + [go_line(T0 + 4_500_000, RID_FILE, 'GET', '/v2/images/{id}/file', 200, SIZE - 1)])
