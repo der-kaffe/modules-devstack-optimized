@@ -109,6 +109,12 @@ func New(service *service.Service, authenticator auth.Authenticator, publicURL, 
 			}
 			h.logger.Log(r.Context(), level, "request completed", "request_id", requestID, "method", method, "route", logRoute(r.URL.Path), "status", observed.status, "duration_ms", time.Since(start).Milliseconds(), "response_bytes", observed.bytes, "error_kind", observed.kind)
 		}()
+		// Version discovery is public in the original (no authtoken in its
+		// pipeline); keystoneauth in Nova requests it before any image call.
+		if status, ok := discovery(r); ok {
+			h.versions(w, status)
+			return
+		}
 		values := r.Header.Values("X-Auth-Token")
 		if len(values) != 1 || strings.TrimSpace(values[0]) == "" {
 			h.failure(w, auth.ErrInvalidToken)
@@ -144,7 +150,7 @@ func New(service *service.Service, authenticator auth.Authenticator, publicURL, 
 
 // Log route templates rather than arbitrary paths, identifiers or queries.
 func logRoute(path string) string {
-	if path == "/v2/images" {
+	if path == "/v2/images" || path == "/" || path == "/versions" {
 		return path
 	}
 	if rest, ok := strings.CutPrefix(path, "/v2/images/"); ok && strings.HasSuffix(rest, "/file") {
