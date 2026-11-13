@@ -1,9 +1,15 @@
 # Flujo de datos Nova → Glance: captura
 
-Estado (2026-11-12): **método implementado y probado offline; falta la captura
-real**. El flujo esperado de abajo es una hipótesis tomada del funcionamiento
-de Nova con libvirt y backend local. Sólo `flow.json` de una corrida de
-[la suite B26](b26-integration-suite.md) lo confirma o lo corrige.
+Estado (2026-11-12): **flujo real capturado** en dos corridas de
+[la suite B26](b26-integration-suite.md). El resultado y su diagrama están en la
+[evidencia](../../evidence/sprint5/glance-b26-suite-20261112/README.md). En
+resumen, Nova hizo tres lecturas de metadatos, dos del esquema `image` y una
+descarga completa de 21 692 416 bytes desde Glance Go (123 ms en Go).
+
+Diferencias con la hipótesis de abajo:
+- Nova también pide `GET /v2/schemas/image`.
+- El descubrimiento (`GET /`) no aparece porque nova-api lo guarda en caché.
+- La presencia de `X-Service-Token` no se pudo observar, porque keystoneauth registra en WARN.
 
 ## Flujo esperado (a confirmar)
 

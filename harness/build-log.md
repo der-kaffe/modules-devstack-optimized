@@ -1029,3 +1029,19 @@ Revalidación del 28/10/2026: se ejecutó `GOMAXPROCS=2 GOTOOLCHAIN=local make c
   idénticos a la captura original de Sprint 2; los tests Go lo comparan con
   `evidence/sprint2/glance/versions.response.json`. Se quita también de la suite
   la exigencia de cero allocations del control de Placement (ahora sólo lectura).
+- Corridas reales posteriores en la VM local (6 GiB):
+  - 403 de Go a nova-api: la credencial validadora de Go estaba en el proyecto de
+    laboratorio, y Go exige que el X-Service-Token de Nova sea de su mismo
+    proyecto. Ahora la suite crea un validador temporal en el proyecto `service`.
+  - Nova llega a ACTIVE desde Go, pero la captura falla por tres razones: la
+    ventana de journalctl es de segundos completos, `/v2/schemas/image` quedaba
+    como unmatched y Apache tiene empates dentro del mismo segundo. Además, la
+    `generation` de Placement sube con cada claim y release (11→12) y rompía el
+    control. Todo corregido, con tests.
+- **Resultado: dos corridas consecutivas sobre `c6684fd` pasan 10/10 casos con
+  limpieza completa.** Nova queda ACTIVE en 4,8 s y 4,4 s desde una imagen que
+  sólo está en Glance Go. El flujo capturado tiene tres lecturas de metadatos,
+  dos del esquema y una descarga completa de 21 692 416 B.
+  [Evidencia](../evidence/sprint5/glance-b26-suite-20261112/README.md).
+- Verificado también: 94 tests Python unitarios OK, `make glance-test` OK y
+  gofmt/vet OK. No se corrió `make check` completo (race detector) en este host.
