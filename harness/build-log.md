@@ -1045,3 +1045,23 @@ Revalidación del 28/10/2026: se ejecutó `GOMAXPROCS=2 GOTOOLCHAIN=local make c
   [Evidencia](../evidence/sprint5/glance-b26-suite-20261112/README.md).
 - Verificado también: 94 tests Python unitarios OK, `make glance-test` OK y
   gofmt/vet OK. No se corrió `make check` completo (race detector) en este host.
+
+
+### 2026-11-18 — Glance Go con Ceph RBD y E2E conjunto con Placement Go
+
+- **Ceph RBD:** el store de Glance Go acepta `GLANCE_GO_STORE_BACKEND=rbd` (build
+  tag `rbd`, go-ceph v0.38.0, sin cambiar `go 1.24.0`). Con `make glance-test-rbd`
+  pasan vet, las 6 pruebas del store contra Ceph Reef real (incluidos 64 MiB y el
+  rechazo del borrado con un clon COW) y la B25 de punta a punta con disco y con
+  RBD. El pool queda vacío al final.
+  [Evidencia](../evidence/sprint5/glance-rbd-20261118/README.md),
+  [uso](../docs/glance/ceph-rbd.md).
+- **E2E conjunto:** `glance_suite.py --with-placement-go`. Dos corridas
+  consecutivas de cada modo sobre `f7ea161`: solo Glance Go 10/10 y Glance Go +
+  Placement Go 14/14, con limpieza completa. Nova publicó su proveedor, programó
+  y reclamó en Placement Go (allocation_candidates 200, PUT allocations 204),
+  arrancó desde la imagen de Glance Go y liberó la allocation al borrar.
+  [Evidencia](../evidence/sprint5/glance-joint-e2e-20261118/README.md).
+- `make check` completo con race detector: OK. 98 tests Python unitarios: OK.
+- Límites: VM local de 6 GiB; prueba funcional, no de rendimiento. Ceph de
+  prueba con `auth none` y memstore. Nova todavía no usa RBD (F3 y F4).

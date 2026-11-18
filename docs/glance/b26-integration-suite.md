@@ -10,6 +10,12 @@ Las pruebas offline están en `tests/unit/test_glance_suite.py`. Antes de esto,
 el repositorio no conservaba evidencia de un boot desde Glance Go (ver
 [preflight v2](../../evidence/sprint5/benchmarks/glance-v2-functional-preflight-20261031/README.md)).
 
+**Modo conjunto (2026-11-18):** con `--with-placement-go` la misma suite sustituye
+también Placement, así que Nova programa y reclama con Placement Go y arranca
+desde Glance Go. Dos corridas consecutivas de cada modo pasaron: solo Glance Go
+10/10 y Glance Go + Placement Go 14/14.
+[Evidencia](../../evidence/sprint5/glance-joint-e2e-20261118/README.md).
+
 ## Qué ejecuta
 
 Un solo comando, `scripts/integration/glance_suite.py`, ejecuta estos casos en
@@ -33,6 +39,21 @@ original y sites de Apache sin cambios, Placement de control intacto, runtime,
 identidades y raíz privada eliminados y controles restaurados. Sólo hay un pase
 si se cumplen los 10 casos **y** toda la limpieza, sin imágenes pendientes.
 
+### Casos adicionales del modo conjunto
+
+Se insertan en este orden:
+
+| Caso | Qué acredita |
+|------|--------------|
+| `placement_go_active` | Ruta `/placement` hacia Placement Go (con lease de rollback) y Placement original detenido. Se reinician nova-compute y nova-scheduler y Nova publica su proveedor e inventario en Go, que empieza sin uso. |
+| `nova_allocations_in_placement_go` | La allocation del servidor está en Placement Go, en el proveedor de Nova, y coincide con el flavor. |
+| `nova_placement_flow` | En la ventana del boot, Nova (su usuario de servicio) llamó a `GET /allocation_candidates` (200) y a `PUT /allocations/{consumer}` (204) en Placement Go. Se guarda en `placement-flow.json`. |
+| `placement_go_released` | Al borrar el servidor, la allocation se libera y el proveedor vuelve a quedar sin uso. |
+
+En la limpieza, Placement se restaura primero, con un nuevo reinicio de Nova
+contra el original, porque la limpieza de Glance usa Placement original como
+control. El pase exige además `placement_restored` y `placement_runtime_removed`.
+
 ## Cómo ejecutarla
 
 Dentro de la VM, con el laboratorio exclusivo, como en B15:
@@ -49,6 +70,9 @@ make glance-integration GLANCE_INTEGRATION_ARGS="\
   --output /home/stack/b26-out-$(date +%s) \
   --allow-mutations"
 ```
+
+Modo conjunto: además, `make placement-build` y
+`--with-placement-go --placement-binary $PWD/bin/placement`.
 
 Opciones:
 - `--payload-mib 1 16 64` repite el ciclo 4 con los tamaños de la campaña. El valor por defecto, `1`, es el más liviano.

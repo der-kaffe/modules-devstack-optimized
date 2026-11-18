@@ -216,6 +216,44 @@ class SuiteGuardTests(unittest.TestCase):
         changed = json.loads(json.dumps(after).replace('"old"', '"leaked"'))
         self.assertNotEqual(suite.without_generations(before), suite.without_generations(changed))
 
+    def test_joint_mode_inserts_placement_cases_in_order(self):
+        joint = suite.required_cases(True)
+        self.assertEqual(suite.required_cases(False), suite.CASES)
+        for before, after in suite.JOINT_AFTER.items():
+            self.assertEqual(joint.index(after), joint.index(before) + 1)
+        # Placement Go must be serving before Nova boots from the Go image.
+        self.assertLess(joint.index('placement_go_active'), joint.index('nova_boot_from_go'))
+
+    def test_joint_pass_requires_placement_restored(self):
+        cases = {n: {'passed': True} for n in suite.required_cases(True)}
+        cleanup = {**{n: True for n in suite.CLEANUP}, 'pending_images': 0}
+        report = {'execution_error': None, 'mode': 'glance-go+placement-go', 'cases': cases, 'cleanup': cleanup}
+        self.assertFalse(suite.suite_passed(report))
+        report['cleanup'].update({n: True for n in suite.JOINT_CLEANUP})
+        self.assertTrue(suite.suite_passed(report))
+        report['cases'].pop('nova_allocations_in_placement_go')
+        self.assertFalse(suite.suite_passed(report))
+
+    def test_placement_flow_needs_candidates_and_claim_from_nova(self):
+        nova = 'nova-user'
+        events = [{'method': 'GET', 'route': '/allocation_candidates', 'status': 200, 'user_id': nova},
+                  {'method': 'PUT', 'route': '/allocations/{consumer_uuid}', 'status': 204, 'user_id': nova},
+                  {'method': 'GET', 'route': '/resource_providers/{uuid}', 'status': 200, 'user_id': 'other'}]
+        summary = suite.placement_flow_summary(events, nova)
+        self.assertEqual((summary['nova_calls'], summary['other_calls']), (2, 1))
+        self.assertTrue(suite.placement_flow_accepted(summary))
+        self.assertFalse(suite.placement_flow_accepted(suite.placement_flow_summary(events[:1], nova)))
+        self.assertFalse(suite.placement_flow_accepted(suite.placement_flow_summary(events, 'someone-else')))
+
+    def test_joint_mode_requires_the_placement_binary(self):
+        with tempfile.TemporaryDirectory() as folder:
+            base = Path(folder).resolve()
+            args = SimpleNamespace(allow_mutations=True, output=base / 'o', work_root=base / 'tt-placement-x',
+                                   binary=Path(__file__), wait_seconds=180, lease_seconds=900, payload_mib=[1],
+                                   with_placement_go=True, placement_binary=None)
+            with self.assertRaisesRegex(ValueError, 'placement-binary'):
+                suite.run(args)
+
     def test_server_image_id_accepts_sdk_shapes(self):
         self.assertEqual(suite.server_image_id(SimpleNamespace(image={'id': IMAGE})), IMAGE)
         self.assertEqual(suite.server_image_id(SimpleNamespace(image=SimpleNamespace(id=IMAGE))), IMAGE)

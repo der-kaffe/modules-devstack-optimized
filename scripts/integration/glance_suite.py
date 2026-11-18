@@ -24,6 +24,7 @@ from pathlib import Path
 import re
 import secrets
 import shutil
+import subprocess
 import sys
 import time
 from types import SimpleNamespace
@@ -41,6 +42,7 @@ from placement_differential import read_token  # noqa: E402
 import placement_preflight  # noqa: E402
 # Shared lab helper despite its historical name: it builds the *Glance* Go runtime.
 import placement_runtime  # noqa: E402
+import placement_switch  # noqa: E402
 from placement_suite import exclusive_run, require, save_json, sdk_connection  # noqa: E402
 
 # Placement is read before/after only as a non-interference control (Nova must
@@ -62,20 +64,53 @@ def placement_control_ok(report):
             and report.get('no_sharing') is True)
 
 GO_URL = 'http://127.0.0.1:19293'  # fixed by glance_preflight.Session.prepare
+PLACEMENT_URL = 'http://192.168.122.10/placement'
+PLACEMENT_GO_URL = 'http://127.0.0.1:18779'
 MIB = 1024**2
 CASES = ('preflight_and_isolation', 'auth_fail_closed', 'not_found', 'catalog_and_bytes_direct',
          'route_go_public', 'catalog_and_bytes_public', 'image_for_nova', 'nova_boot_from_go',
          'nova_glance_flow', 'server_and_image_removed')
 CLEANUP = ('original_unchanged', 'runtime_removed', 'identity_removed', 'private_root_removed',
            'controls_restored', 'server_removed', 'service_validator_removed')
+# --with-placement-go: Nova also schedules/claims through Placement Go.
+JOINT_AFTER = {'catalog_and_bytes_public': 'placement_go_active',
+               'nova_boot_from_go': 'nova_allocations_in_placement_go',
+               'nova_glance_flow': 'nova_placement_flow',
+               'server_and_image_removed': 'placement_go_released'}
+JOINT_CLEANUP = ('placement_restored', 'placement_runtime_removed')
+
+
+def required_cases(joint):
+    if not joint:
+        return CASES
+    out = []
+    for name in CASES:
+        out.append(name)
+        if name in JOINT_AFTER:
+            out.append(JOINT_AFTER[name])
+    return tuple(out)
 
 
 def suite_passed(report):
     cleanup = report.get('cleanup', {})
+    joint = report.get('mode') == 'glance-go+placement-go'
     return (report.get('execution_error') is None
-            and all(report.get('cases', {}).get(name, {}).get('passed') is True for name in CASES)
-            and all(cleanup.get(name) is True for name in CLEANUP)
+            and all(report.get('cases', {}).get(name, {}).get('passed') is True for name in required_cases(joint))
+            and all(cleanup.get(name) is True for name in CLEANUP + (JOINT_CLEANUP if joint else ()))
             and cleanup.get('pending_images') == 0)
+
+
+def placement_flow_summary(events, nova_user):
+    """Placement Go requests in the boot window; Nova is its service user."""
+    nova = [e for e in events if e.get('user_id') == nova_user]
+    routes = [(e['method'], e['route'], e['status']) for e in nova]
+    return {'nova_calls': len(nova), 'other_calls': len(events) - len(nova),
+            'allocation_candidates_200': routes.count(('GET', '/allocation_candidates', 200)),
+            'allocation_claims_204': sum(1 for m, r, st in routes if m == 'PUT' and r.startswith('/allocations/') and st == 204)}
+
+
+def placement_flow_accepted(summary):
+    return summary['allocation_candidates_200'] >= 1 and summary['allocation_claims_204'] >= 1
 
 
 def unauthenticated_status(url, token=None, path='/v2/images'):
@@ -130,6 +165,13 @@ class Suite(Session):
         self.nova_image = None
         self.window = None
         self.validator = None
+        self.joint = bool(getattr(args, 'with_placement_go', False))
+        self.report['mode'] = 'glance-go+placement-go' if self.joint else 'glance-go'
+        self.report['required_cases'] = list(required_cases(self.joint))
+        self.pl_runtime = self.root / 'tt-placement-pl-runtime'
+        self.provider = None
+        self.flavor = None
+        self.deleted_server = None
 
     def checkpoint(self):
         save_json(self.args.output / 'report.json', self.report)
@@ -154,6 +196,35 @@ class Suite(Session):
                     binary=self.args.binary, auth_root=self.auth, mysql_port=13317, listen_port=19293,
                     public_url=self.args.url, keystone_url='http://192.168.122.10/identity/v3')
         save_json(self.args.output / 'runtime.json', json.loads((self.runtime / 'public-report.json').read_text()))
+        if self.joint:
+            providers = json.loads((self.args.output / 'placement-before/report.json').read_text())['providers']
+            require(len(providers) == 1, 'single flat compute provider')
+            self.provider = providers[0]['provider']['uuid']
+            # Same validator as Glance Go: service role in the 'service' project.
+            self.action('placement-runtime', placement_runtime, action='prepare', domain='placement',
+                        root=self.pl_runtime, binary=self.args.placement_binary, auth_root=self.auth,
+                        mysql_port=13316, listen_port=18779, public_url=PLACEMENT_URL,
+                        keystone_url='http://192.168.122.10/identity/v3')
+            save_json(self.args.output / 'placement-runtime.json',
+                      json.loads((self.pl_runtime / 'public-report.json').read_text()))
+
+    def placement_get(self, path, version):
+        request = Request(PLACEMENT_GO_URL + path, headers={
+            'X-Auth-Token': read_token(self.auth / 'service.token'),
+            'OpenStack-API-Version': 'placement ' + version, 'Accept': 'application/json'})
+        try:
+            with urlopen(request, timeout=15) as response:
+                return response.status, json.loads(response.read(2 * MIB))
+        except HTTPError as error:
+            try:
+                return error.code, None
+            finally:
+                error.close()
+
+    def restart_nova(self):
+        # As in B13: compute and scheduler re-read the endpoint and republish.
+        subprocess.run(['sudo', 'systemctl', 'restart', 'devstack@n-cpu.service', 'devstack@n-sch.service'],
+                       check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     def keystone_admin(self):
         from keystoneauth1 import session
@@ -321,6 +392,7 @@ class Suite(Session):
                 break
             time.sleep(2)
         self.report['boot_states'] = states
+        self.flavor = flavor
         require(states and states[-1]['status'] == 'ACTIVE', 'server reached ACTIVE from the Go image')
         require(current.project_id == project and server_image_id(current) == self.nova_image['id'], 'server owner/image')
         time.sleep(3)  # let journald and Apache flush the last records of the window
@@ -343,6 +415,97 @@ class Suite(Session):
         self.pending.pop(('go-public-cirros', ident))
         return {}
 
+    # -- joint mode (Placement Go) --------------------------------------------
+    def case_placement_go_active(self):
+        site = json.loads((self.args.output / 'placement-before/report.json').read_text())['apache_site_sha256']
+        self.action('placement-route-go', placement_switch, action='activate', root=self.pl_runtime,
+                    expected_original_sha=site, public_url=PLACEMENT_URL, lease_seconds=self.args.lease_seconds)
+        require(not placement_switch.active(placement_switch.ORIGINAL_UNIT), 'original Placement stopped')
+        self.restart_nova()
+        started, inventory = time.monotonic(), None
+        while time.monotonic() - started < 180:
+            status, body = self.placement_get('/resource_providers/' + self.provider + '/inventories', '1.26')
+            if status == 200 and {'VCPU', 'MEMORY_MB', 'DISK_GB'} <= set(body['inventories']):
+                inventory = body['inventories']
+                break
+            time.sleep(2)
+        require(inventory is not None, 'nova-compute published its provider and inventory to Placement Go')
+        status, usages = self.placement_get('/resource_providers/' + self.provider + '/usages', '1.0')
+        require(status == 200 and not any(usages['usages'].values()), 'Placement Go provider starts idle')
+        return {'seconds_to_publish': round(time.monotonic() - started, 1),
+                'inventory': {k: v['total'] for k, v in inventory.items()}}
+
+    def case_nova_allocations_in_placement_go(self):
+        status, body = self.placement_get('/allocations/' + self.server, '1.28')
+        require(status == 200 and set(body['allocations']) == {self.provider}, 'server allocation lives in Placement Go')
+        expected = {'VCPU': int(self.flavor.vcpus), 'MEMORY_MB': int(self.flavor.ram), 'DISK_GB': int(self.flavor.disk)}
+        resources = body['allocations'][self.provider]['resources']
+        require(resources == expected, 'allocation matches the flavor')
+        return {'resources': resources}
+
+    def case_nova_placement_flow(self):
+        state = json.loads((self.pl_runtime / 'state.json').read_text())
+        lines = glance_flow.journal([state['go_unit']], *self.window)
+        events = []
+        for line in lines:
+            try:
+                entry = json.loads(line)
+                record = json.loads(entry['MESSAGE'])
+            except (ValueError, KeyError, TypeError):
+                continue
+            ts = int(entry['__REALTIME_TIMESTAMP'])
+            if record.get('msg') == 'request completed' and self.window[0] <= ts <= self.window[1]:
+                events.append({'ts_us': ts, 'method': record.get('method'), 'route': record.get('route'),
+                               'status': record.get('status'), 'duration_ms': record.get('duration_ms'),
+                               'user_id': record.get('user_id')})
+        admin, _ = self.keystone_admin()
+        nova_users = admin.users.list(name='nova')
+        require(len(nova_users) == 1, 'single nova service user')
+        summary = placement_flow_summary(events, nova_users[0].id)
+        origin = events[0]['ts_us'] if events else 0
+        timeline = [{'t_ms': round((e['ts_us'] - origin) / 1000, 1), 'caller': 'nova' if e['user_id'] == nova_users[0].id else 'other',
+                     'method': e['method'], 'route': e['route'], 'status': e['status'], 'duration_ms': e['duration_ms']}
+                    for e in events]
+        save_json(self.args.output / 'placement-flow.json', {'timeline': timeline, 'summary': summary,
+                                                             'accepted': placement_flow_accepted(summary)})
+        require(placement_flow_accepted(summary), 'Nova scheduled and claimed through Placement Go')
+        return summary
+
+    def case_placement_go_released(self):
+        started = time.monotonic()
+        while time.monotonic() - started < 60:
+            status, body = self.placement_get('/allocations/' + self.deleted_server, '1.28')
+            if status == 200 and body['allocations'] == {}:
+                break
+            time.sleep(1)
+        else:
+            raise AssertionError('allocation released in Placement Go')
+        status, usages = self.placement_get('/resource_providers/' + self.provider + '/usages', '1.0')
+        require(status == 200 and not any(usages['usages'].values()), 'Placement Go provider idle again')
+        return {'released_after_s': round(time.monotonic() - started, 1)}
+
+    def restore_placement(self):
+        done = {}
+        try:
+            if (self.pl_runtime / 'switch-state.json').exists():
+                self.action('placement-route-restore', placement_switch, action='restore', root=self.pl_runtime,
+                            public_url=PLACEMENT_URL)
+            require(placement_switch.active(placement_switch.ORIGINAL_UNIT), 'original Placement active')
+            self.restart_nova()  # back to the original endpoint and caches
+            placement_switch.wait_version(PLACEMENT_URL, '1.39')
+            done['placement_restored'] = True
+        except Exception as error:
+            done['placement_restored'] = False
+            done['placement_restore_error'] = type(error).__name__
+        try:
+            if done['placement_restored'] and self.pl_runtime.exists():
+                self.action('placement-runtime-cleanup', placement_runtime, action='cleanup', root=self.pl_runtime)
+            done['placement_runtime_removed'] = not self.pl_runtime.exists()
+        except Exception as error:
+            done['placement_runtime_removed'] = False
+            done['placement_runtime_error'] = type(error).__name__
+        return done
+
     # -- cleanup -----------------------------------------------------------
     def delete_server(self):
         if self.connection is None:
@@ -358,7 +521,7 @@ class Suite(Session):
         require(actual.name == self.server_name, 'server ownership')
         self.connection.compute.delete_server(self.server, ignore_missing=False)
         self.connection.compute.wait_for_delete(actual, interval=2, wait=self.args.wait_seconds)
-        self.server = None
+        self.deleted_server, self.server = self.server, None
 
     def cleanup(self):
         server_error = None
@@ -366,6 +529,8 @@ class Suite(Session):
             self.delete_server()
         except Exception as error:  # keep going: route/runtime must still be restored
             server_error = type(error).__name__
+        # Placement first: the Glance cleanup reads the original Placement as control.
+        placement = self.restore_placement() if self.joint else {}
         try:
             result = super().cleanup()
         except Exception as error:
@@ -374,6 +539,7 @@ class Suite(Session):
             result = {'error': type(error).__name__,
                       'reason': str(error) if isinstance(error, AssertionError) else None,
                       **self.fallback_cleanup()}
+        result.update(placement)
         result['server_removed'] = server_error is None and self.server is None
         if server_error:
             result['server_error'] = server_error
@@ -408,7 +574,7 @@ class Suite(Session):
 
     def execute(self):
         try:
-            for name in CASES:
+            for name in required_cases(self.joint):
                 self.case(name)
         except Exception as error:
             self.report['execution_error'] = type(error).__name__
@@ -428,7 +594,7 @@ class Suite(Session):
             self.checkpoint()
         print(json.dumps({'run_id': self.report['run_id'], 'passed': self.report['passed'],
                           'cases_passed': sum(c['passed'] for c in self.report['cases'].values()),
-                          'cases_required': len(CASES)}), flush=True)
+                          'cases_required': len(required_cases(self.joint)), 'mode': self.report['mode']}), flush=True)
         return 0 if self.report['passed'] else 1
 
     def keep_diagnostics(self):
@@ -451,6 +617,8 @@ def run(args):
         raise ValueError('binary, bounded wait and bounded route lease required')
     if not args.payload_mib or any(size not in (1, 16, 64) for size in args.payload_mib):
         raise ValueError('payload sizes limited to 1, 16 and 64 MiB')
+    if getattr(args, 'with_placement_go', False) and not (args.placement_binary and args.placement_binary.is_file()):
+        raise ValueError('--with-placement-go requires --placement-binary')
     with exclusive_run(Path('/run/lock/tt-placement-integration.lock')):
         args.work_root.mkdir(mode=0o700, exist_ok=False)
         logging.disable(logging.CRITICAL)
@@ -470,6 +638,9 @@ def main():
                         help='direct round-trip sizes; 1 keeps the run light, 1 16 64 matches the campaign')
     parser.add_argument('--wait-seconds', type=int, default=180)
     parser.add_argument('--lease-seconds', type=int, default=900)
+    parser.add_argument('--with-placement-go', action='store_true',
+                        help='also replace Placement: Nova schedules and claims through Placement Go')
+    parser.add_argument('--placement-binary', type=Path)
     parser.add_argument('--allow-mutations', action='store_true')
     args = parser.parse_args()
     try:

@@ -1,9 +1,11 @@
 # Proyección: Ceph RBD como backend de Glance Go
 
-Estado (2026-11-12): **proyección de diseño y esfuerzo. No está implementado ni
-medido.** Se basa en el código actual del store y en los resultados de la
-campaña `glance-compact-v3`. Ninguna cifra de este documento sale de una
-ejecución con Ceph.
+Estado (2026-11-18): **las fases F1 y F2 ya están implementadas y probadas
+contra un Ceph real**: interfaz `store.Backend`, store RBD con go-ceph y prueba de
+punta a punta HTTP → MySQL → RBD. Ver [ceph-rbd.md](ceph-rbd.md) y la
+[evidencia](../../evidence/sprint5/glance-rbd-20261118/README.md). Siguen como
+proyección F3 (`direct_url`), F4 (Nova con `images_type=rbd`) y F5 (campaña).
+El resto de este documento conserva el diseño original con el que se implementó.
 
 ## Por qué RBD
 
