@@ -1,0 +1,307 @@
+{
+  "schema": 1,
+  "suite": "glance-b26",
+  "run_id": "tt-glance-b26-9718800dace4",
+  "started_utc": "2026-11-18T18:22:31.802511+00:00",
+  "cases": {
+    "preflight_and_isolation": {
+      "passed": true,
+      "seconds": 23.9,
+      "original_images": 1
+    },
+    "auth_fail_closed": {
+      "passed": true,
+      "seconds": 0.1,
+      "go_missing_token": 401,
+      "go_invalid_token": 401,
+      "python_missing_token": 401,
+      "go_discovery": 300,
+      "python_discovery": 300
+    },
+    "not_found": {
+      "passed": true,
+      "seconds": 0.1
+    },
+    "catalog_and_bytes_direct": {
+      "passed": true,
+      "seconds": 0.1,
+      "sizes_mib": [
+        1
+      ]
+    },
+    "route_go_public": {
+      "passed": true,
+      "seconds": 1.2,
+      "lease_seconds": 900
+    },
+    "catalog_and_bytes_public": {
+      "passed": true,
+      "seconds": 0.1
+    },
+    "image_for_nova": {
+      "passed": true,
+      "seconds": 0.3,
+      "image_size": 21692416,
+      "source": "cirros-0.6.3-x86_64-disk.img"
+    },
+    "nova_boot_from_go": {
+      "passed": false,
+      "error": "AssertionError",
+      "reason": "server reached ACTIVE from the Go image",
+      "seconds": 3.8
+    }
+  },
+  "cleanup": {
+    "original_unchanged": true,
+    "private_root_removed": true,
+    "runtime_removed": true,
+    "identity_removed": true,
+    "controls_restored": true,
+    "original_services_active": {
+      "devstack@placement-api.service": true,
+      "devstack@g-api.service": true,
+      "devstack@n-cpu.service": true,
+      "devstack@n-sch.service": true,
+      "devstack@keystone.service": true
+    },
+    "pending_images": 0,
+    "server_removed": true,
+    "service_validator_removed": true
+  },
+  "execution_error": "AssertionError",
+  "passed": false,
+  "mode": "glance-go",
+  "required_cases": [
+    "preflight_and_isolation",
+    "auth_fail_closed",
+    "not_found",
+    "catalog_and_bytes_direct",
+    "route_go_public",
+    "catalog_and_bytes_public",
+    "image_for_nova",
+    "nova_boot_from_go",
+    "nova_glance_flow",
+    "server_and_image_removed"
+  ],
+  "service_validator": {
+    "name": "tt-placement-glance-d66a04a14d30",
+    "project": "service",
+    "roles": [
+      "service"
+    ]
+  },
+  "boot_states": [
+    {
+      "t_s": 0.2,
+      "status": "BUILD"
+    },
+    {
+      "t_s": 2.3,
+      "status": "ERROR"
+    }
+  ],
+  "private_diagnostics": "/home/stack/tt-placement-b26-1795026151-diagnostics",
+  "request_cases": [
+    {
+      "method": "GET",
+      "path": "/v2/images?limit=1000",
+      "status": 200,
+      "expected": 200,
+      "bytes": 1056,
+      "error_kind": null
+    },
+    {
+      "method": "GET",
+      "path": "/v2/images/9ed86d46-0996-440e-965e-b62b78a4a86a",
+      "status": 404,
+      "expected": 404,
+      "bytes": 155,
+      "error_kind": null
+    },
+    {
+      "method": "GET",
+      "path": "/v2/images/56eae6d1-43c1-40bd-8c48-af81329ca04e",
+      "status": 404,
+      "expected": 404,
+      "bytes": 155,
+      "error_kind": null
+    },
+    {
+      "method": "POST",
+      "path": "/v2/images",
+      "status": 201,
+      "expected": 201,
+      "bytes": 652,
+      "error_kind": null
+    },
+    {
+      "method": "PUT",
+      "path": "/v2/images/56eae6d1-43c1-40bd-8c48-af81329ca04e/file",
+      "status": 204,
+      "expected": 204,
+      "bytes": 0,
+      "error_kind": null
+    },
+    {
+      "method": "GET",
+      "path": "/v2/images/56eae6d1-43c1-40bd-8c48-af81329ca04e",
+      "status": 200,
+      "expected": 200,
+      "bytes": 818,
+      "error_kind": null
+    },
+    {
+      "method": "GET",
+      "path": "/v2/images/56eae6d1-43c1-40bd-8c48-af81329ca04e/file",
+      "status": 200,
+      "expected": 200,
+      "bytes": 1048576,
+      "error_kind": null
+    },
+    {
+      "method": "PATCH",
+      "path": "/v2/images/56eae6d1-43c1-40bd-8c48-af81329ca04e",
+      "status": 200,
+      "expected": 200,
+      "bytes": 826,
+      "error_kind": null
+    },
+    {
+      "method": "DELETE",
+      "path": "/v2/images/56eae6d1-43c1-40bd-8c48-af81329ca04e",
+      "status": 204,
+      "expected": 204,
+      "bytes": 0,
+      "error_kind": null
+    },
+    {
+      "method": "GET",
+      "path": "/v2/images/56eae6d1-43c1-40bd-8c48-af81329ca04e",
+      "status": 404,
+      "expected": 404,
+      "bytes": 155,
+      "error_kind": null
+    },
+    {
+      "method": "GET",
+      "path": "/v2/images/dae49bec-a2a0-4904-885a-7499bcb62b59",
+      "status": 404,
+      "expected": 404,
+      "bytes": 155,
+      "error_kind": null
+    },
+    {
+      "method": "POST",
+      "path": "/v2/images",
+      "status": 201,
+      "expected": 201,
+      "bytes": 652,
+      "error_kind": null
+    },
+    {
+      "method": "PUT",
+      "path": "/v2/images/dae49bec-a2a0-4904-885a-7499bcb62b59/file",
+      "status": 204,
+      "expected": 204,
+      "bytes": 0,
+      "error_kind": null
+    },
+    {
+      "method": "GET",
+      "path": "/v2/images/dae49bec-a2a0-4904-885a-7499bcb62b59",
+      "status": 200,
+      "expected": 200,
+      "bytes": 818,
+      "error_kind": null
+    },
+    {
+      "method": "GET",
+      "path": "/v2/images/dae49bec-a2a0-4904-885a-7499bcb62b59/file",
+      "status": 200,
+      "expected": 200,
+      "bytes": 1048576,
+      "error_kind": null
+    },
+    {
+      "method": "PATCH",
+      "path": "/v2/images/dae49bec-a2a0-4904-885a-7499bcb62b59",
+      "status": 200,
+      "expected": 200,
+      "bytes": 826,
+      "error_kind": null
+    },
+    {
+      "method": "DELETE",
+      "path": "/v2/images/dae49bec-a2a0-4904-885a-7499bcb62b59",
+      "status": 204,
+      "expected": 204,
+      "bytes": 0,
+      "error_kind": null
+    },
+    {
+      "method": "GET",
+      "path": "/v2/images/dae49bec-a2a0-4904-885a-7499bcb62b59",
+      "status": 404,
+      "expected": 404,
+      "bytes": 155,
+      "error_kind": null
+    },
+    {
+      "method": "GET",
+      "path": "/v2/images/2362c4b9-35fa-452f-920a-dcd05f799082",
+      "status": 404,
+      "expected": 404,
+      "bytes": 155,
+      "error_kind": null
+    },
+    {
+      "method": "POST",
+      "path": "/v2/images",
+      "status": 201,
+      "expected": 201,
+      "bytes": 648,
+      "error_kind": null
+    },
+    {
+      "method": "PUT",
+      "path": "/v2/images/2362c4b9-35fa-452f-920a-dcd05f799082/file",
+      "status": 204,
+      "expected": 204,
+      "bytes": 0,
+      "error_kind": null
+    },
+    {
+      "method": "GET",
+      "path": "/v2/images/2362c4b9-35fa-452f-920a-dcd05f799082",
+      "status": 200,
+      "expected": 200,
+      "bytes": 812,
+      "error_kind": null
+    },
+    {
+      "method": "DELETE",
+      "path": "/v2/images/2362c4b9-35fa-452f-920a-dcd05f799082",
+      "status": 204,
+      "expected": 204,
+      "bytes": 0,
+      "error_kind": null
+    },
+    {
+      "method": "GET",
+      "path": "/v2/images/2362c4b9-35fa-452f-920a-dcd05f799082",
+      "status": 404,
+      "expected": 404,
+      "bytes": 155,
+      "error_kind": null
+    },
+    {
+      "method": "GET",
+      "path": "/v2/images?limit=1000",
+      "status": 200,
+      "expected": 200,
+      "bytes": 1056,
+      "error_kind": null
+    }
+  ],
+  "finished_utc": "2026-11-18T18:23:09.696599+00:00"
+}

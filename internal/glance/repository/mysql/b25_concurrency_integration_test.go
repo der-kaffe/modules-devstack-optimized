@@ -49,6 +49,9 @@ func TestB25MySQLConcurrentFences(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := New(db, 5*time.Second)
+	if err := r.PrepareStatements(ctx); err != nil {
+		t.Fatal(err)
+	}
 	receipt := model.DataContent{Size: 6, Checksum: strings.Repeat("a", 32), SHA512: strings.Repeat("b", 128)}
 	seed := func() (string, string) {
 		t.Helper()

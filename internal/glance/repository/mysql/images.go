@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"sort"
 	"time"
 
 	"github.com/PaoloCastanon/modules-devstack-optimized/internal/glance/model"
@@ -16,6 +15,10 @@ import (
 type Repository struct {
 	db      *sql.DB
 	timeout time.Duration
+	// stmts holds server-side prepared statements for hot static reads,
+	// created once by PrepareStatements (outside any transaction) and then
+	// only read. nil means every query is prepared and executed per call.
+	stmts map[string]*sql.Stmt
 }
 
 var _ repository.Repository = (*Repository)(nil)
@@ -45,20 +48,8 @@ func (r *Repository) Create(ctx context.Context, image model.Image) error {
 		}
 		return fmt.Errorf("insert image: %w", err)
 	}
-	keys := make([]string, 0, len(image.Properties))
-	for key := range image.Properties {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		if _, err = tx.ExecContext(ctx, "INSERT INTO image_properties (image_id, name, value) VALUES (?, ?, ?)", image.ID, key, image.Properties[key]); err != nil {
-			return fmt.Errorf("insert image property: %w", err)
-		}
-	}
-	for _, tag := range image.Tags {
-		if _, err = tx.ExecContext(ctx, "INSERT INTO image_tags (image_id, value) VALUES (?, ?)", image.ID, tag); err != nil {
-			return fmt.Errorf("insert image tag: %w", err)
-		}
+	if err = insertChildren(ctx, tx, image.ID, image.Properties, image.Tags); err != nil {
+		return err
 	}
 	if err = tx.Commit(); err != nil {
 		return fmt.Errorf("commit metadata transaction: %w", err)
@@ -74,7 +65,7 @@ func (r *Repository) Get(ctx context.Context, id string) (model.Image, error) {
 		return model.Image{}, fmt.Errorf("begin metadata read: %w", err)
 	}
 	defer tx.Rollback()
-	image, err := readImage(ctx, tx, id, false)
+	image, err := r.readImage(ctx, tx, id, false)
 	if err != nil {
 		return model.Image{}, err
 	}

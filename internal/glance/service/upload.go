@@ -411,7 +411,15 @@ func (u *UploadCoordinator) Upload(ctx context.Context, who auth.Identity, value
 		cancel()
 		return zero, stateErr
 	}
-	blobErr := u.verifyBlob(resolved, key, info)
+	// A successful Publish already established these bytes (official Glance
+	// never re-reads an upload): confirm presence and size only. A failed
+	// Publish keeps the full verification before any compensation.
+	var blobErr error
+	if publishErr == nil {
+		blobErr = u.committedBlobPresent(resolved, key, info.Size)
+	} else {
+		blobErr = u.verifyBlob(resolved, key, info)
+	}
 	cancel()
 	if publishErr != nil {
 		// Matching bytes alone cannot prove directory fsync after Publish failed.

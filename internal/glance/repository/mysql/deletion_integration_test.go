@@ -58,6 +58,9 @@ func TestMySQLCoordinatedDeletion(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := mysql.New(db, 3*time.Second)
+	if err := r.PrepareStatements(ctx); err != nil {
+		t.Fatal(err)
+	}
 	ids := []string{}
 	for _, phase := range []model.DataPhase{"", model.DataReserved, model.DataStaged, model.DataPublished, model.DataCommitted} {
 		i, e := model.New(model.CreateInput{Tags: []string{"retain"}, Properties: map[string]string{"retain": "yes"}}, "delete-fixture", time.Now())

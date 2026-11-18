@@ -13,7 +13,7 @@ import (
 )
 
 // BufferSize is the maximum transfer/hash buffer allocated by an operation.
-const BufferSize = 256 * 1024
+const BufferSize = 1024 * 1024 // 1 MiB (was 256 KiB): ~7% faster 64 MiB uploads; bounded per transfer
 
 var (
 	ErrInvalidKey   = errors.New("invalid store UUID key")

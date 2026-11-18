@@ -58,6 +58,9 @@ func TestMySQLCatalogOperations(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := mysql.New(db, 5*time.Second)
+	if err := r.PrepareStatements(ctx); err != nil {
+		t.Fatal(err)
+	}
 	s := service.New(r, time.Now)
 	who := auth.Identity{UserID: "catalog-fixture", ProjectID: "project-a", Roles: []string{"member", "reader"}, ExpiresAt: time.Now().Add(time.Hour)}
 	other := who

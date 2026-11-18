@@ -157,6 +157,9 @@ func TestB25MySQLFilesystemHTTP(t *testing.T) {
 	start := func() {
 		t.Helper()
 		r := mysql.New(db, c.DependencyTimeout)
+		if err = r.PrepareStatements(ctx); err != nil {
+			t.Fatal(err)
+		}
 		checks := startupChecks{ping: db.PingContext, account: func(ctx context.Context) error { return mysql.CheckAccount(ctx, db, "serve") }, schema: func(ctx context.Context) error { return mysql.VerifySchema(ctx, db) }, scope: func(ctx context.Context) (string, error) { return databaseScope(ctx, db) }}
 		if err = verifyBackend(ctx, checks); err != nil {
 			t.Fatal(err)

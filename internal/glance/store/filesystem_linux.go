@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"hash"
 	"io"
 	"os"
 	"path/filepath"
@@ -461,8 +462,41 @@ func (s *Filesystem) Stage(ctx context.Context, key Key, src io.Reader, limit in
 	return info, nil
 }
 
+// md5Worker hashes MD5 on its own goroutine while the caller computes SHA-512
+// and writes the same chunk (the two digests are independent). It never reads
+// the source; each chunk is joined before its buffer is reused, and the
+// goroutine exits before measure returns, so nothing is left behind.
+type md5Worker struct {
+	in   chan []byte
+	done chan struct{}
+	h    hash.Hash
+}
+
+func newMD5Worker() *md5Worker {
+	w := &md5Worker{in: make(chan []byte), done: make(chan struct{}), h: md5.New()}
+	go func() {
+		for chunk := range w.in {
+			_, _ = w.h.Write(chunk)
+			w.done <- struct{}{}
+		}
+		close(w.done)
+	}()
+	return w
+}
+
+func (w *md5Worker) submit(chunk []byte) { w.in <- chunk }
+func (w *md5Worker) wait()               { <-w.done }
+
+// stop ends the goroutine; it must not be called while a chunk is pending.
+func (w *md5Worker) stop() {
+	close(w.in)
+	<-w.done
+}
+
 func measure(ctx context.Context, src io.Reader, write func([]byte) (int, error), limit int64, expected *int64) (Info, error) {
-	m, h := md5.New(), sha512.New()
+	h := sha512.New()
+	m := newMD5Worker()
+	defer m.stop()
 	buf := make([]byte, BufferSize)
 	var size int64
 	emptyReads := 0
@@ -493,17 +527,21 @@ func measure(ctx context.Context, src io.Reader, write func([]byte) (int, error)
 		}
 		if n > 0 {
 			emptyReads = 0
+			data := chunk[:n]
+			m.submit(data)
+			var writeErr error
 			if write != nil {
-				written, err := write(chunk[:n])
-				if err != nil {
-					return Info{}, err
+				written, err := write(data)
+				if err == nil && written != n {
+					err = io.ErrShortWrite
 				}
-				if written != n {
-					return Info{}, io.ErrShortWrite
-				}
+				writeErr = err
 			}
-			_, _ = m.Write(chunk[:n])
-			_, _ = h.Write(chunk[:n])
+			_, _ = h.Write(data)
+			m.wait() // buf is reused by the next Read
+			if writeErr != nil {
+				return Info{}, writeErr
+			}
 			size += int64(n)
 		} else if readErr == nil {
 			emptyReads++
@@ -524,7 +562,7 @@ func measure(ctx context.Context, src io.Reader, write func([]byte) (int, error)
 	if expected != nil && size != *expected {
 		return Info{}, ErrSizeMismatch
 	}
-	return Info{Size: size, Checksum: hex.EncodeToString(m.Sum(nil)), SHA512: hex.EncodeToString(h.Sum(nil))}, nil
+	return Info{Size: size, Checksum: hex.EncodeToString(m.h.Sum(nil)), SHA512: hex.EncodeToString(h.Sum(nil))}, nil
 }
 
 func (s *Filesystem) Publish(ctx context.Context, key Key, expected Info) error {

@@ -92,3 +92,27 @@ Se aplicó la regla a cada operación restante. Sin una mejora segura, se deja.
 | Log de cada solicitud (JSON a journald) | Equivalente: el original también registra cada solicitud | No | Se deja |
 | Capacidad compartida PUT/GET/DELETE (16) | Distinto: el original no tiene ese límite | No es velocidad, es coordinación (recuperación y cierre) | Se deja como diferencia conocida; es configurable de 1 a 64 |
 | Resolución de un commit incierto (`verifyBlob`) | Distinto | Sólo ocurre ante un error de commit | Se deja: vale más la seguridad |
+
+## Ronda 2 (2026-11-19): revisión de todo el código de Glance Go
+
+Cada hallazgo se calificó como alto, medio o bajo. Sólo se aplicó lo que mejora
+sin romper nada y sigue igual o más cerca del original.
+
+| # | Calificación | Cambio | Estado | Efecto medido |
+|---|---|---|---|---|
+| A1 | Alto | La carga no relee ni rehashea la imagen después de un `Publish` exitoso (sólo comprueba presencia y tamaño); si `Publish` falla, verifica completo | Aplicado | Carga de 64 MiB en el servicio: 356 → 193 ms |
+| A2 | Alto | MD5 en paralelo con SHA-512 y la escritura (un worker acotado por llamada, sin goroutines colgadas) | Aplicado | 193 → 146 ms; `Open` verificado 176 → 113 ms |
+| A3 | Alto → medio | Las 8 lecturas estáticas frecuentes se preparan una vez al arrancar y se reutilizan por conexión (`tx.StmtContext`); los parámetros siguen enlazados en el servidor | Aplicado | Metadatos p50 en la VM: 1,57 → 1,18 ms |
+| M1 | Medio | Propiedades y tags con un `INSERT` multi-fila (lotes de 500) | Aplicado | De N sentencias a 1 por tabla |
+| M2 | Medio | GET de bytes con una sola transacción de lectura (`DownloadView`: imagen y estado, sin propiedades ni tags) | Aplicado | Primer byte de 64 MiB: 2,6 → 1,5 ms |
+| M3 | Medio | Quitar la relectura de estado tras cada escritura confirmada de la carga | **No aplicado** | Las pruebas de la carga dependen de ella para detectar cambios concurrentes con el error exacto; la carga ya es unas 12× más rápida que el oficial |
+| M4 | Medio | Omitir el fsync del archivo en el camino rápido de `Publish` | **No aplicado** | Es un límite de durabilidad probado (`publish-file-sync`) y la ganancia es marginal |
+| B1 | Bajo | Serialización JSON | **No aplicado** | El handler completo tarda 24 µs, alrededor del 1 % de una consulta |
+| B2 | Bajo | Log por solicitud | **No aplicado** | Igual que el original |
+| B3 | Bajo | Buffer de transferencia de 1 MiB (antes 256 KiB) | Aplicado | 145 → 135 ms en la carga de 64 MiB |
+
+**Resultado en la VM** (ronda 1 frente a ronda 2): carga de 64 MiB 477 → 212 ms,
+metadatos 1,57 → 1,18 ms y 1 099 → 1 254 req/s con 16 hilos. La auditoría contra
+el oficial vuelve a dar ninguna operación más lenta (carga de 64 MiB en 0,31–0,35
+del oficial). La regresión con Nova pasa en los dos modos.
+[Evidencia](../../evidence/sprint5/glance-perf2-20261119/README.md).

@@ -86,6 +86,10 @@ func run(args []string, logger *slog.Logger) (result error) {
 		return nil
 	}
 	r := mysql.New(db, c.DependencyTimeout)
+	if err = r.PrepareStatements(startup); err != nil {
+		// Correctness does not depend on it: every query still runs unprepared.
+		logger.Warn("hot statements not prepared; continuing without reuse")
+	}
 	var binary *binaryRuntime
 	var options []api.Option
 	if c.Binary.Enabled {

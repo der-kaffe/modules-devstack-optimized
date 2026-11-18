@@ -1094,3 +1094,16 @@ Revalidación del 28/10/2026: se ejecutó `GOMAXPROCS=2 GOTOOLCHAIN=local make c
   corridas. Go no es más lento en ninguna (Go/oficial entre 0,02 y 0,66; 1 149
   frente a 215 req/s con 16 hilos), así que no hubo cambios adicionales.
   [Evidencia](../evidence/sprint5/glance-audit-20261119/README.md).
+- 2026-11-19, ronda 2 de optimización (todo Glance Go, calificado alto, medio o
+  bajo; detalle en `docs/glance/performance.md`):
+  - aplicados: A1 (sin relectura tras `Publish` exitoso), A2 (MD5 en paralelo),
+    A3 (statements preparados), M1 (`INSERT` multi-fila), M2 (GET en 1
+    transacción) y B3 (buffer de 1 MiB);
+  - no aplicados, con su motivo: M3, M4 y B1.
+
+  En la VM, ronda 1 frente a ronda 2: carga de 64 MiB 477 → 212 ms, metadatos
+  1,57 → 1,18 ms. Auditoría contra el oficial ×2: ninguna operación más lenta.
+  B26: Glance Go 10/10 ×2 y conjunto 14/14 ×2. La primera corrida falló por
+  RabbitMQ arrancando justo tras encender la VM, sin relación con Glance.
+  `make check` OK y `glance-test-rbd` 9/9.
+  [Evidencia](../evidence/sprint5/glance-perf2-20261119/README.md).

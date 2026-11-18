@@ -349,3 +349,48 @@ func TestDownloadConcurrentCloseReleasesOwnershipOnce(t *testing.T) {
 		t.Fatal("ownership released incorrectly", closes)
 	}
 }
+
+// M2: a repository offering DownloadView serves GET from one read transaction
+// (no catalog.Get + separate state read) with the same visibility policy.
+type downloadViewDouble struct {
+	*uploadSQLDouble
+}
+
+func (v downloadViewDouble) DownloadView(ctx context.Context, id string) (model.Image, model.DataState, error) {
+	v.log.add("sql.View")
+	s, err := v.DataStateSnapshot(ctx, id)
+	if err != nil {
+		return model.Image{}, model.DataState{}, err
+	}
+	return v.image, s, nil
+}
+
+func TestDownloadUsesSingleViewWhenAvailable(t *testing.T) {
+	for _, foreign := range []bool{false, true} {
+		u, d, fs, log := uploadFixture(t)
+		uploadSeed(d, model.DataCommitted)
+		fs.blob = append([]byte{}, uploadPayload...)
+		u.transfers = downloadViewDouble{d}
+		who := identity("reader")
+		if foreign {
+			who.ProjectID = "other"
+			d.image.Visibility = "private"
+		}
+		out, err := u.OpenDownload(context.Background(), who, uploadImageID)
+		calls := strings.Join(log.snapshot(), ",")
+		if foreign {
+			if err == nil || out != nil || strings.Contains(calls, "fs.OpenStream") {
+				t.Fatal("foreign private image served", err, calls)
+			}
+			continue
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, _ := io.ReadAll(out.Body)
+		_ = out.Body.Close()
+		if !bytes.Equal(got, uploadPayload) || strings.Contains(calls, "catalog.Get") || !strings.HasPrefix(calls, "sql.View,sql.State,fs.OpenStream") {
+			t.Fatal(calls)
+		}
+	}
+}

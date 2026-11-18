@@ -63,6 +63,16 @@ func (u *UploadCoordinator) downloadImage(ctx context.Context, who auth.Identity
 	if err != nil {
 		return downloadError(ctx, err)
 	}
+	return downloadVisible(who, id, i)
+}
+
+// downloadViewer reads the image row and its data state in ONE read-only
+// transaction (no properties/tags, which a download does not use).
+type downloadViewer interface {
+	DownloadView(context.Context, string) (model.Image, model.DataState, error)
+}
+
+func downloadVisible(who auth.Identity, id string, i model.Image) error {
 	if i.ID != id {
 		return ErrUploadReconciliation
 	}
@@ -98,6 +108,10 @@ func (u *UploadCoordinator) downloadState(ctx context.Context, id string) (model
 	if err != nil {
 		return model.DataState{}, downloadError(ctx, err)
 	}
+	return downloadStateValid(id, s)
+}
+
+func downloadStateValid(id string, s model.DataState) (model.DataState, error) {
 	if s.ImageID != id || s.Deleted != (s.Status == "deleted") || s.Operation != nil && (s.Operation.ImageID != id || s.Operation.Validate() != nil) {
 		return model.DataState{}, ErrUploadReconciliation
 	}
@@ -159,7 +173,21 @@ func (u *UploadCoordinator) OpenDownload(ctx context.Context, who auth.Identity,
 	if err != nil {
 		return nil, err
 	}
-	if err = u.downloadImage(ctx, who, id); err != nil {
+	var s model.DataState
+	viewer, combined := u.transfers.(downloadViewer)
+	if combined {
+		i, state, err := viewer.DownloadView(ctx, id)
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil, notFound(id)
+		}
+		if err != nil {
+			return nil, downloadError(ctx, err)
+		}
+		if err = downloadVisible(who, id, i); err != nil {
+			return nil, err
+		}
+		s = state
+	} else if err = u.downloadImage(ctx, who, id); err != nil {
 		return nil, err
 	}
 	leave, err := u.claimDownload()
@@ -172,7 +200,11 @@ func (u *UploadCoordinator) OpenDownload(ctx context.Context, who auth.Identity,
 			leave()
 		}
 	}()
-	s, err := u.downloadState(ctx, id)
+	if combined {
+		s, err = downloadStateValid(id, s)
+	} else {
+		s, err = u.downloadState(ctx, id)
+	}
 	if err != nil {
 		return nil, err
 	}

@@ -72,7 +72,7 @@ inválidos/insatisfacibles, 416 y Content-Range bytes */N cuando se conoce N.
 Se emiten application/octet-stream, Content-Length exacto y Content-MD5 del
 contenido completo, también para 206. No se anuncian ETag/If-Range, multipart ni
 HEAD (405). El Content-Range legado como cabecera de solicitud no se interpreta.
-Se copia con un buffer fijo de 256 KiB y se cierra el descriptor en todas las
+Se copia con un buffer fijo de 1 MiB (antes 256 KiB; en disco se usa sendfile) y se cierra el descriptor en todas las
 rutas. Si falla lectura/escritura después de cabeceras, se registra binary_stream
 y se aborta mediante http.ErrAbortHandler: nunca se anexa JSON ni cambia el status.
 Un fd ya abierto puede terminar después de un unlink posterior en Linux; la

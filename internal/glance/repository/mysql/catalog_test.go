@@ -238,3 +238,33 @@ func TestSQLListScopesFiltersMarkersAndReadback(t *testing.T) {
 		}
 	})
 }
+
+// M1: several properties go in ONE multi-row INSERT, sorted by key, with the
+// image id repeated per row; a single tag keeps the single-row statement.
+func TestUpdateWritesChildrenWithMultiRowInserts(t *testing.T) {
+	addThree := func(i model.Image) (model.Image, error) {
+		return model.ApplyPatch(i, []model.PatchOperation{
+			{Op: "add", Key: "z", Value: json.RawMessage(`"3"`)},
+			{Op: "add", Key: "b", Value: json.RawMessage(`"2"`)},
+		}, time.Unix(200, 0))
+	}
+	steps := []sqlStep{execute("BEGIN")}
+	steps = append(steps, imageReadSteps(true)...)
+	props := execute("INSERT INTO image_properties (image_id, name, value) VALUES (?, ?, ?), (?, ?, ?), (?, ?, ?)")
+	props.checkArgs = func(args []driver.NamedValue) {
+		want := []string{catalogID, "b", "2", catalogID, "x", "original", catalogID, "z", "3"}
+		if len(args) != len(want) {
+			t.Fatalf("args %v", args)
+		}
+		for n, a := range args {
+			if a.Value != want[n] {
+				t.Fatalf("arg %d = %v, want %v", n, a.Value, want[n])
+			}
+		}
+	}
+	steps = append(steps, execute(updateImageSQL), execute("DELETE FROM image_properties WHERE image_id=?"), execute("DELETE FROM image_tags WHERE image_id=?"), props, execute("INSERT INTO image_tags (image_id, value) VALUES (?, ?)"), execute("COMMIT"))
+	got, err := New(scriptDB(t, steps), time.Second).Update(context.Background(), catalogID, addThree)
+	if err != nil || got.Properties["b"] != "2" || got.Properties["z"] != "3" || got.Properties["x"] != "original" {
+		t.Fatal(got.Properties, err)
+	}
+}

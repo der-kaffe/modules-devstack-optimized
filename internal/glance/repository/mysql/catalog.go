@@ -24,12 +24,19 @@ func scanImage(row scanner) (model.Image, error) {
 	return i, err
 }
 
-func readImage(ctx context.Context, tx *sql.Tx, id string, lock bool) (model.Image, error) {
-	query := "SELECT " + imageColumns + " FROM images WHERE id=? AND deleted=FALSE"
+const (
+	readImageQuery     = "SELECT " + imageColumns + " FROM images WHERE id=? AND deleted=FALSE"
+	lockImageQuery     = readImageQuery + " FOR UPDATE"
+	oneImagePropsQuery = "SELECT image_id, name, value FROM image_properties WHERE image_id IN (?) ORDER BY image_id, name"
+	oneImageTagsQuery  = "SELECT image_id, value FROM image_tags WHERE image_id IN (?) ORDER BY image_id, value"
+)
+
+func (r *Repository) readImage(ctx context.Context, tx *sql.Tx, id string, lock bool) (model.Image, error) {
+	query := readImageQuery
 	if lock {
-		query += " FOR UPDATE"
+		query = lockImageQuery
 	}
-	i, err := scanImage(tx.QueryRowContext(ctx, query, id))
+	i, err := scanImage(r.queryRow(ctx, tx, query, id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return i, repository.ErrNotFound
 	}
@@ -37,14 +44,14 @@ func readImage(ctx context.Context, tx *sql.Tx, id string, lock bool) (model.Ima
 		return i, err
 	}
 	images := []model.Image{i}
-	if err = readChildren(ctx, tx, images); err != nil {
+	if err = r.readChildren(ctx, tx, images); err != nil {
 		return i, err
 	}
 	return images[0], nil
 }
 
 // All cursors are closed before issuing another statement on the pinned tx.
-func readChildren(ctx context.Context, tx *sql.Tx, images []model.Image) error {
+func (r *Repository) readChildren(ctx context.Context, tx *sql.Tx, images []model.Image) error {
 	if len(images) == 0 {
 		return nil
 	}
@@ -55,7 +62,7 @@ func readChildren(ctx context.Context, tx *sql.Tx, images []model.Image) error {
 		byID[images[n].ID] = &images[n]
 	}
 	places := strings.TrimSuffix(strings.Repeat("?,", len(args)), ",")
-	rows, err := tx.QueryContext(ctx, "SELECT image_id, name, value FROM image_properties WHERE image_id IN ("+places+") ORDER BY image_id, name", args...)
+	rows, err := r.query(ctx, tx, "SELECT image_id, name, value FROM image_properties WHERE image_id IN ("+places+") ORDER BY image_id, name", args...)
 	if err != nil {
 		return err
 	}
@@ -82,7 +89,7 @@ func readChildren(ctx context.Context, tx *sql.Tx, images []model.Image) error {
 	if closeErr != nil {
 		return closeErr
 	}
-	rows, err = tx.QueryContext(ctx, "SELECT image_id, value FROM image_tags WHERE image_id IN ("+places+") ORDER BY image_id, value", args...)
+	rows, err = r.query(ctx, tx, "SELECT image_id, value FROM image_tags WHERE image_id IN ("+places+") ORDER BY image_id, value", args...)
 	if err != nil {
 		return err
 	}
@@ -109,6 +116,47 @@ func readChildren(ctx context.Context, tx *sql.Tx, images []model.Image) error {
 	return closeErr
 }
 
+// childBatch keeps a multi-row INSERT far below MySQL's 65535 placeholders.
+const childBatch = 500
+
+// insertChildren writes properties (sorted by key) and tags (in their order)
+// with one multi-row INSERT per table and batch instead of one per row. A
+// single row produces exactly the former single-row statement.
+func insertChildren(ctx context.Context, tx *sql.Tx, id string, properties map[string]string, tags []string) error {
+	keys := make([]string, 0, len(properties))
+	for key := range properties {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for start := 0; start < len(keys); start += childBatch {
+		batch := keys[start:min(start+childBatch, len(keys))]
+		args := make([]any, 0, 3*len(batch))
+		for _, key := range batch {
+			args = append(args, id, key, properties[key])
+		}
+		q := "INSERT INTO image_properties (image_id, name, value) VALUES " + valueRows("(?, ?, ?)", len(batch))
+		if _, err := tx.ExecContext(ctx, q, args...); err != nil {
+			return fmt.Errorf("insert image property: %w", err)
+		}
+	}
+	for start := 0; start < len(tags); start += childBatch {
+		batch := tags[start:min(start+childBatch, len(tags))]
+		args := make([]any, 0, 2*len(batch))
+		for _, tag := range batch {
+			args = append(args, id, tag)
+		}
+		q := "INSERT INTO image_tags (image_id, value) VALUES " + valueRows("(?, ?)", len(batch))
+		if _, err := tx.ExecContext(ctx, q, args...); err != nil {
+			return fmt.Errorf("insert image tag: %w", err)
+		}
+	}
+	return nil
+}
+
+func valueRows(row string, n int) string {
+	return strings.TrimSuffix(strings.Repeat(row+", ", n), ", ")
+}
+
 func conflict(err error) error {
 	var my *driver.MySQLError
 	if errors.As(err, &my) && (my.Number == 1213 || my.Number == 1205) {
@@ -126,7 +174,7 @@ func (r *Repository) Update(ctx context.Context, id string, change func(model.Im
 		return result, err
 	}
 	defer tx.Rollback()
-	current, err := readImage(ctx, tx, id, true)
+	current, err := r.readImage(ctx, tx, id, true)
 	if err != nil {
 		return result, err
 	}
@@ -154,20 +202,8 @@ func (r *Repository) Update(ctx context.Context, id string, change func(model.Im
 	if _, err = tx.ExecContext(ctx, "DELETE FROM image_tags WHERE image_id=?", id); err != nil {
 		return model.Image{}, err
 	}
-	keys := make([]string, 0, len(result.Properties))
-	for key := range result.Properties {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		if _, err = tx.ExecContext(ctx, "INSERT INTO image_properties (image_id, name, value) VALUES (?, ?, ?)", id, key, result.Properties[key]); err != nil {
-			return model.Image{}, err
-		}
-	}
-	for _, tag := range result.Tags {
-		if _, err = tx.ExecContext(ctx, "INSERT INTO image_tags (image_id, value) VALUES (?, ?)", id, tag); err != nil {
-			return model.Image{}, err
-		}
+	if err = insertChildren(ctx, tx, id, result.Properties, result.Tags); err != nil {
+		return model.Image{}, err
 	}
 	if err = tx.Commit(); err != nil {
 		return model.Image{}, err
@@ -184,7 +220,7 @@ func (r *Repository) Delete(ctx context.Context, id string, now time.Time, check
 		return err
 	}
 	defer tx.Rollback()
-	current, err := readImage(ctx, tx, id, true)
+	current, err := r.readImage(ctx, tx, id, true)
 	if err != nil {
 		return err
 	}
@@ -335,7 +371,7 @@ func (r *Repository) List(ctx context.Context, o model.ListOptions) ([]model.Ima
 	defer tx.Rollback()
 	var marker *model.Image
 	if o.Marker != "" {
-		image, e := readImage(ctx, tx, o.Marker, false)
+		image, e := r.readImage(ctx, tx, o.Marker, false)
 		if errors.Is(e, repository.ErrNotFound) || (e == nil && !o.Admin && image.Owner != o.ProjectID && image.Visibility != "public" && image.Visibility != "community") {
 			return nil, model.Fail(model.Invalid, "Invalid or inaccessible marker.")
 		}
@@ -369,7 +405,7 @@ func (r *Repository) List(ctx context.Context, o model.ListOptions) ([]model.Ima
 	if closeErr != nil {
 		return nil, closeErr
 	}
-	if err = readChildren(ctx, tx, images); err != nil {
+	if err = r.readChildren(ctx, tx, images); err != nil {
 		return nil, err
 	}
 	if err = tx.Commit(); err != nil {

@@ -27,7 +27,7 @@ func TestUploadSuccessAndCallOrder(t *testing.T) {
 	if c.Size != size || c.VirtualSize == nil || *c.VirtualSize != size || c.Checksum != expected.Checksum || c.SHA512 != expected.SHA512 {
 		t.Fatal(c)
 	}
-	want := []string{"catalog.Get", "sql.State", "sql.Reserve", "sql.State", "catalog.Get", "fs.Stage", "sql.Stage", "sql.State", "fs.Publish", "sql.State", "fs.Open", "fs.Close", "sql.Publish", "sql.State", "sql.Commit", "sql.State"}
+	want := []string{"catalog.Get", "sql.State", "sql.Reserve", "sql.State", "catalog.Get", "fs.Stage", "sql.Stage", "sql.State", "fs.Publish", "sql.State", "fs.OpenStream", "fs.Close", "sql.Publish", "sql.State", "sql.Commit", "sql.State"}
 	if got := log.snapshot(); !reflect.DeepEqual(got, want) {
 		t.Fatal("wrong order", got)
 	}
@@ -515,6 +515,26 @@ func TestDefiniteReservationFailureLeavesNoIntentionOrFiles(t *testing.T) {
 	for _, c := range log.snapshot() {
 		if strings.HasPrefix(c, "fs.") || c == "sql.BeginCleanup" {
 			t.Fatal("compensated absent intent")
+		}
+	}
+}
+
+// A1: a successful Publish is not re-read (presence and size only, as official
+// Glance never re-reads an upload); a failed Publish keeps full verification
+// before deciding whether to compensate.
+func TestUploadVerifiesFullyOnlyAfterPublishFailure(t *testing.T) {
+	for _, failing := range []bool{false, true} {
+		u, _, fs, log := uploadFixture(t)
+		if failing {
+			fs.faults["Publish"] = uploadStoreFault{err: errors.New("secret fsync"), applied: true}
+		}
+		_, err := u.Upload(context.Background(), identity("member"), uploadImageID, bytes.NewReader(uploadPayload), nil)
+		if (err != nil) != failing {
+			t.Fatal(failing, err)
+		}
+		calls := strings.Join(log.snapshot(), ",")
+		if strings.Contains(calls, "fs.Open,") != failing || !failing && !strings.Contains(calls, "fs.OpenStream") {
+			t.Fatal(failing, calls)
 		}
 	}
 }

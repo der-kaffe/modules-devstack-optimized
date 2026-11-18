@@ -61,7 +61,7 @@ func (r *Repository) TombstoneData(ctx context.Context, id string, expectedAttem
 	}
 	defer tx.Rollback()
 	// Same order as catalog PATCH/DELETE: image first, operation second.
-	i, err := readImage(ctx, tx, id, true)
+	i, err := r.readImage(ctx, tx, id, true)
 	if err != nil {
 		return out, err
 	}
