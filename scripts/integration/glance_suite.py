@@ -80,7 +80,7 @@ JOINT_AFTER = {'catalog_and_bytes_public': 'placement_go_active',
 JOINT_CLEANUP = ('placement_restored', 'placement_runtime_removed')
 
 
-def required_cases(joint, quick=False):
+def required_cases(joint, quick=False, audit=False):
     out = []
     for name in CASES:
         out.append(name)
@@ -88,7 +88,28 @@ def required_cases(joint, quick=False):
             out.append(JOINT_AFTER[name])
         if quick and name == 'catalog_and_bytes_direct':
             out.append('quick_compare')
+        # Same public Apache route and client: original before the switch, Go after.
+        if audit and name == 'not_found':
+            out.append('audit_original')
+        if audit and name == 'catalog_and_bytes_public':
+            out.append('audit_go')
     return tuple(out)
+
+
+AUDIT_OPS = ('discovery', 'show', 'list_tagged', 'schema', 'create', 'patch', 'delete',
+             'upload_1m', 'upload_64m', 'download_1m', 'download_1m_ttfb', 'download_64m',
+             'download_64m_ttfb', 'show_c16')
+
+
+def audit_compare(original, go):
+    """Per operation: p50 of each and Go/original ratio (<1 = Go faster)."""
+    rows = {}
+    for op in AUDIT_OPS:
+        a, b = original.get(op), go.get(op)
+        if a and b and a.get('p50') and b.get('p50') is not None:
+            rows[op] = {'original_p50_ms': a['p50'], 'go_p50_ms': b['p50'],
+                        'go_over_original': round(b['p50'] / a['p50'], 3), 'go_slower': b['p50'] > a['p50']}
+    return rows
 
 
 def percentile(values, fraction):
@@ -100,8 +121,9 @@ def suite_passed(report):
     cleanup = report.get('cleanup', {})
     joint = report.get('mode') == 'glance-go+placement-go'
     quick = 'quick_compare' in report.get('required_cases', ())
+    audit = 'audit_go' in report.get('required_cases', ())
     return (report.get('execution_error') is None
-            and all(report.get('cases', {}).get(name, {}).get('passed') is True for name in required_cases(joint, quick))
+            and all(report.get('cases', {}).get(name, {}).get('passed') is True for name in required_cases(joint, quick, audit))
             and all(cleanup.get(name) is True for name in CLEANUP + (JOINT_CLEANUP if joint else ()))
             and cleanup.get('pending_images') == 0)
 
@@ -174,7 +196,9 @@ class Suite(Session):
         self.joint = bool(getattr(args, 'with_placement_go', False))
         self.report['mode'] = 'glance-go+placement-go' if self.joint else 'glance-go'
         self.quick = bool(getattr(args, 'quick_compare', False))
-        self.report['required_cases'] = list(required_cases(self.joint, self.quick))
+        self.audit = bool(getattr(args, 'audit', False))
+        self.audit_results = {}
+        self.report['required_cases'] = list(required_cases(self.joint, self.quick, self.audit))
         self.pl_runtime = self.root / 'tt-placement-pl-runtime'
         self.provider = None
         self.flavor = None
@@ -481,6 +505,117 @@ class Suite(Session):
                 'download_64m_ttfb_ms': ms([d['ttfb_ns'] / 1e6 for d in downloads]),
                 'upload_64m_ms': ms(uploads)}
 
+    # -- measured audit: official Glance vs Glance Go (not a campaign) -------
+    def case_audit_original(self):
+        self.audit_results['original'] = self.measure_target('python')
+        return {'measured': sorted(self.audit_results['original'])}
+
+    def case_audit_go(self):
+        self.audit_results['go'] = self.measure_target('go-public')
+        rows = audit_compare(self.audit_results['original'], self.audit_results['go'])
+        save_json(self.args.output / 'audit.json', {'original': self.audit_results['original'],
+                                                    'go': self.audit_results['go'], 'compare': rows})
+        return {'go_slower_ops': sorted(op for op, row in rows.items() if row['go_slower'])}
+
+    def measure_target(self, label):
+        """Identical workload through the public route (Apache /image)."""
+        from concurrent.futures import ThreadPoolExecutor
+        from glance_http import Client, payload
+        url = self.args.url
+        sizes = {'1m': MIB, '64m': 64 * MIB}
+        files = {}
+        for name, size in sizes.items():
+            path = self.root / ('audit-' + name + '.bin')
+            if not path.exists():
+                save_json(self.root / ('audit-' + name + '.json'), payload(path, size, seed=b'glance-audit'), private=True)
+            files[name] = (path, json.loads((self.root / ('audit-' + name + '.json')).read_text()))
+        samples = {op: [] for op in AUDIT_OPS}
+        client = Client(url, self.token)
+        owned = []
+
+        def call(method, path, expected, op=None, **kw):
+            sample, value = client.request(method, path, **kw)
+            require(sample['status'] == expected and sample['error_kind'] is None, label + ' ' + method + ' ' + path.split('/')[2])
+            if op:
+                samples[op].append(sample['elapsed_ns'] / 1e6)
+            return sample, value
+
+        def new_image(op=None):
+            ident = str(uuid.uuid4())
+            body = {'id': ident, 'name': 'tt-glance-preflight-audit', 'tags': [self.tag], 'disk_format': 'raw',
+                    'container_format': 'bare', 'visibility': 'private'}
+            self.pending[(label + '-audit', ident)] = {'url': url, 'name': body['name']}
+            if label == 'python':
+                self.python_ids.append(ident)
+            call('POST', '/v2/images', 201, op, body=body)
+            owned.append(ident)
+            return ident
+
+        def drop(ident, op=None):
+            call('DELETE', '/v2/images/' + ident, 204, op)
+            self.pending.pop((label + '-audit', ident))
+            owned.remove(ident)
+
+        try:
+            for _ in range(30):
+                started = time.monotonic_ns()
+                status = unauthenticated_status(url, path='/')
+                samples['discovery'].append((time.monotonic_ns() - started) / 1e6)
+                require(status == 300, label + ' discovery')
+            listed = [new_image() for _ in range(10)]
+            for ident in listed[:1]:
+                call('PUT', '/v2/images/' + ident + '/file', 204, upload=files['1m'][0], content_type='application/octet-stream')
+            for _ in range(100):
+                call('GET', '/v2/images/' + listed[0], 200, 'show')
+            for _ in range(30):
+                _, value = call('GET', '/v2/images?limit=25&tag=' + self.tag, 200, 'list_tagged')
+                require(len(value['images']) == 10, label + ' tagged list size')
+            for _ in range(30):
+                call('GET', '/v2/schemas/image', 200, 'schema')
+            for _ in range(15):
+                ident = new_image('create')
+                call('PATCH', '/v2/images/' + ident, 200, 'patch', body=[{'op': 'replace', 'path': '/name', 'value': 'tt-glance-preflight-audit-p'}],
+                     content_type='application/openstack-images-v2.1-json-patch')
+                self.pending[(label + '-audit', ident)]['name'] = 'tt-glance-preflight-audit-p'
+                drop(ident, 'delete')
+            for name, count in (('1m', 10), ('64m', 3)):
+                for _ in range(count):
+                    ident = new_image()
+                    call('PUT', '/v2/images/' + ident + '/file', 204, 'upload_' + name, upload=files[name][0], content_type='application/octet-stream')
+                    for _ in range(20 if name == '1m' else 5):
+                        sample, _ = call('GET', '/v2/images/' + ident + '/file', 200, 'download_' + name, expected_payload=files[name][1])
+                        samples['download_' + name + '_ttfb'].append(sample['ttfb_ns'] / 1e6)
+                    drop(ident)
+                    break  # one image per size is downloaded repeatedly; uploads repeat below
+                for _ in range(count - 1):
+                    ident = new_image()
+                    call('PUT', '/v2/images/' + ident + '/file', 204, 'upload_' + name, upload=files[name][0], content_type='application/octet-stream')
+                    drop(ident)
+
+            def threaded(_):
+                c = Client(url, self.token)
+                try:
+                    sample, _ = c.request('GET', '/v2/images/' + listed[0])
+                    require(sample['status'] == 200 and sample['error_kind'] is None, label + ' concurrent show')
+                    return sample['elapsed_ns'] / 1e6
+                finally:
+                    c.close()
+            started = time.monotonic()
+            with ThreadPoolExecutor(16) as pool:
+                samples['show_c16'] = list(pool.map(threaded, range(320)))
+            show_c16_rps = round(320 / (time.monotonic() - started), 1)
+        finally:
+            for ident in list(owned):
+                try:
+                    drop(ident)
+                except Exception:
+                    pass  # Session.cleanup removes whatever is still pending
+            client.close()
+        result = {op: {'n': len(v), 'p50': round(percentile(v, .5), 2), 'p95': round(percentile(v, .95), 2)}
+                  for op, v in samples.items() if v}
+        result['show_c16']['rps'] = show_c16_rps
+        return result
+
     # -- joint mode (Placement Go) --------------------------------------------
     def case_placement_go_active(self):
         site = json.loads((self.args.output / 'placement-before/report.json').read_text())['apache_site_sha256']
@@ -640,7 +775,7 @@ class Suite(Session):
 
     def execute(self):
         try:
-            for name in required_cases(self.joint, self.quick):
+            for name in required_cases(self.joint, self.quick, self.audit):
                 self.case(name)
         except Exception as error:
             self.report['execution_error'] = type(error).__name__
@@ -660,7 +795,7 @@ class Suite(Session):
             self.checkpoint()
         print(json.dumps({'run_id': self.report['run_id'], 'passed': self.report['passed'],
                           'cases_passed': sum(c['passed'] for c in self.report['cases'].values()),
-                          'cases_required': len(required_cases(self.joint, self.quick)), 'mode': self.report['mode']}), flush=True)
+                          'cases_required': len(required_cases(self.joint, self.quick, self.audit)), 'mode': self.report['mode']}), flush=True)
         return 0 if self.report['passed'] else 1
 
     def keep_diagnostics(self):
@@ -704,6 +839,8 @@ def main():
                         help='direct round-trip sizes; 1 keeps the run light, 1 16 64 matches the campaign')
     parser.add_argument('--wait-seconds', type=int, default=180)
     parser.add_argument('--lease-seconds', type=int, default=900)
+    parser.add_argument('--audit', action='store_true',
+                        help='measure the same operations on official Glance and on Glance Go (public route)')
     parser.add_argument('--quick-compare', action='store_true',
                         help='add a quick before/after timing case against Glance Go (not a campaign)')
     parser.add_argument('--with-placement-go', action='store_true',

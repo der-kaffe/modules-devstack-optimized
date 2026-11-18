@@ -60,7 +60,24 @@ Los 176 ms de antes coinciden con el TTFB de 64 MiB que midió la campaña v3.
 revisión medida `d3286a6`, no a esta. Una campaña nueva (de Paolo) tendría que
 usar una versión de protocolo nueva.
 
-## Auditoría del resto contra Glance oficial
+## Auditoría medida contra Glance oficial (2026-11-19)
+
+Se midieron las mismas 14 operaciones en el Glance oficial y en Glance Go, por
+la misma ruta pública, con el mismo cliente y el mismo token, en dos corridas:
+- descubrimiento;
+- consulta y listado;
+- esquema;
+- crear, PATCH y DELETE;
+- cargas y descargas de 1 y 64 MiB, con su TTFB;
+- consulta con 16 hilos.
+
+**Go no es más lento en ninguna.** La razón Go/oficial va de 0,02 (crear) a 0,66
+(descarga de 64 MiB), y con 16 hilos Go atiende 1 149 req/s frente a 215. Así
+que, por la regla, no queda nada que llevar al original. Evidencia en
+[glance-audit-20261119](../../evidence/sprint5/glance-audit-20261119/README.md).
+
+### Revisión por código (previa a la medición)
+
 
 Se aplicó la regla a cada operación restante. Sin una mejora segura, se deja.
 

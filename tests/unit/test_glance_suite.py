@@ -266,6 +266,15 @@ class SuiteGuardTests(unittest.TestCase):
         self.assertTrue(suite.suite_passed(report))
         self.assertEqual(suite.percentile([5, 1, 3, 2, 4], .5), 3)
 
+    def test_audit_measures_original_before_and_go_after_the_switch(self):
+        cases = suite.required_cases(False, audit=True)
+        self.assertLess(cases.index('audit_original'), cases.index('route_go_public'))
+        self.assertGreater(cases.index('audit_go'), cases.index('route_go_public'))
+        rows = suite.audit_compare({'show': {'p50': 5.0}, 'download_64m': {'p50': 50.0}},
+                                   {'show': {'p50': 2.0}, 'download_64m': {'p50': 60.0}})
+        self.assertEqual((rows['show']['go_slower'], rows['download_64m']['go_slower']), (False, True))
+        self.assertEqual(rows['download_64m']['go_over_original'], 1.2)
+
     def test_server_image_id_accepts_sdk_shapes(self):
         self.assertEqual(suite.server_image_id(SimpleNamespace(image={'id': IMAGE})), IMAGE)
         self.assertEqual(suite.server_image_id(SimpleNamespace(image=SimpleNamespace(id=IMAGE))), IMAGE)

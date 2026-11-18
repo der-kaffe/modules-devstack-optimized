@@ -1089,3 +1089,8 @@ Revalidación del 28/10/2026: se ejecutó `GOMAXPROCS=2 GOTOOLCHAIN=local make c
   confirmada (existencia y tamaño, como el original, que no escanea nada). El
   resto se dejó porque es igual al original o más rápido; la tabla está en
   `docs/glance/performance.md`.
+- 2026-11-19, auditoría medida (`glance_suite.py --audit`): las mismas 14
+  operaciones en el Glance oficial y en Glance Go, por la ruta pública, en dos
+  corridas. Go no es más lento en ninguna (Go/oficial entre 0,02 y 0,66; 1 149
+  frente a 215 req/s con 16 hilos), así que no hubo cambios adicionales.
+  [Evidencia](../evidence/sprint5/glance-audit-20261119/README.md).

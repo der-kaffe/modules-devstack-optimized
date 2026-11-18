@@ -1,0 +1,24 @@
+sequenceDiagram
+    participant Apache as Apache /image
+    participant Go as Glance Go
+    Nova->>Apache: GET /
+    Apache->>Go: GET /
+    Go-->>Nova: 300, 1432 B, 0 ms (t=0.0 ms)
+    Nova->>Apache: GET /v2/images/{id}
+    Apache->>Go: GET /v2/images/{id}
+    Go-->>Nova: 200, 812 B, 28 ms (t=62.8 ms)
+    Nova->>Apache: GET /v2/schemas/{name}
+    Apache->>Go: GET /v2/schemas/{name}
+    Go-->>Nova: 200, 1669 B, 0 ms (t=65.4 ms)
+    Nova->>Apache: GET /v2/images/{id}
+    Apache->>Go: GET /v2/images/{id}
+    Go-->>Nova: 200, 812 B, 18 ms (t=2073.0 ms)
+    Nova->>Apache: GET /v2/images/{id}/file
+    Apache->>Go: GET /v2/images/{id}/file
+    Go-->>Nova: 200, 21692416 B, 19 ms (t=2094.8 ms)
+    Nova->>Apache: GET /v2/images/{id}
+    Apache->>Go: GET /v2/images/{id}
+    Go-->>Nova: 200, 812 B, 1 ms (t=2203.2 ms)
+    Nova->>Apache: GET /v2/schemas/{name}
+    Apache->>Go: GET /v2/schemas/{name}
+    Go-->>Nova: 200, 1669 B, 0 ms (t=2205.3 ms)
