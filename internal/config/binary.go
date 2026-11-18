@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -13,8 +14,11 @@ import (
 
 // Binary is operator policy. Neither paths, scope nor limits come from HTTP.
 type Binary struct {
-	Enabled                                                                             bool
+	Enabled bool
+	// Backend is "filesystem" (default) or "rbd" (binary built with -tags rbd).
+	Backend                                                                             string
 	Root, Scope                                                                         string
+	RBDConf, RBDUser, RBDPool                                                           string
 	MaxUploadBytes                                                                      int64
 	MaxConcurrent                                                                       int
 	UploadTimeout, DownloadTimeout, ResolutionTimeout, RecoveryTimeout, ShutdownTimeout time.Duration
@@ -29,8 +33,20 @@ func loadBinary(c *Config, env func(string) string, mode string) error {
 		b.Enabled = v == "true"
 	}
 	b.Root, b.Scope = env("GLANCE_GO_STORE_ROOT"), env("GLANCE_GO_STORE_SCOPE")
+	b.Backend = env("GLANCE_GO_STORE_BACKEND")
+	if b.Backend == "" {
+		b.Backend = "filesystem"
+	}
+	b.RBDConf, b.RBDUser, b.RBDPool = env("GLANCE_GO_RBD_CONF"), env("GLANCE_GO_RBD_USER"), env("GLANCE_GO_RBD_POOL")
+	if b.Backend != "filesystem" && b.Backend != "rbd" {
+		return errors.New("GLANCE_GO_STORE_BACKEND must be filesystem or rbd")
+	}
 	if (mode == "serve" && b.Enabled) || mode == "store-init" {
-		if !filepath.IsAbs(b.Root) || filepath.Clean(b.Root) != b.Root || b.Root == "/" {
+		if b.Backend == "rbd" {
+			if err := validateRBD(b); err != nil {
+				return err
+			}
+		} else if !filepath.IsAbs(b.Root) || filepath.Clean(b.Root) != b.Root || b.Root == "/" {
 			return errors.New("GLANCE_GO_STORE_ROOT must be a clean absolute private path")
 		}
 		id, err := uuid.Parse(b.Scope)
@@ -75,9 +91,26 @@ func loadBinary(c *Config, env func(string) string, mode string) error {
 		return errors.New("transfer timeouts must exceed dependency timeout")
 	}
 	// A root without the explicit switch must not silently look enabled.
-	if mode == "serve" && !b.Enabled && (strings.TrimSpace(b.Root) != "" || b.Scope != "") {
+	if mode == "serve" && !b.Enabled && (strings.TrimSpace(b.Root) != "" || b.Scope != "" || b.RBDPool != "") {
 		return errors.New("store configuration requires GLANCE_GO_BINARY_ENABLED=true")
 	}
 	c.Binary = b
+	return nil
+}
+
+var rbdIdentifier = regexp.MustCompile(`^[A-Za-z0-9._-]{1,64}$`)
+
+// validateRBD keeps the two backends unambiguous: an RBD store never also names
+// a filesystem root, and its cluster file, cephx user and pool are explicit.
+func validateRBD(b Binary) error {
+	if strings.TrimSpace(b.Root) != "" {
+		return errors.New("GLANCE_GO_STORE_ROOT must be empty with the rbd backend")
+	}
+	if !filepath.IsAbs(b.RBDConf) || filepath.Clean(b.RBDConf) != b.RBDConf {
+		return errors.New("GLANCE_GO_RBD_CONF must be a clean absolute path")
+	}
+	if !rbdIdentifier.MatchString(b.RBDUser) || !rbdIdentifier.MatchString(b.RBDPool) {
+		return errors.New("GLANCE_GO_RBD_USER and GLANCE_GO_RBD_POOL must be plain names")
+	}
 	return nil
 }

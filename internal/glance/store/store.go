@@ -28,7 +28,16 @@ var (
 	ErrBusy         = errors.New("store root already in use")
 	ErrClosed       = errors.New("store closed")
 	ErrInvalidSize  = errors.New("invalid size limit or declaration")
+	// ErrInUse: a backend refuses to delete content that other objects depend
+	// on (RBD copy-on-write clones made by Nova). Glance Python answers 409.
+	ErrInUse = errors.New("store content in use")
 )
+
+// Backend is a Store with exclusive ownership that must be closed once idle.
+type Backend interface {
+	Store
+	Close() error
+}
 
 type Key struct {
 	ImageID   string

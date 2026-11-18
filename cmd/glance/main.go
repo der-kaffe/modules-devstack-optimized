@@ -17,7 +17,6 @@ import (
 	"github.com/PaoloCastanon/modules-devstack-optimized/internal/glance/api"
 	"github.com/PaoloCastanon/modules-devstack-optimized/internal/glance/repository/mysql"
 	"github.com/PaoloCastanon/modules-devstack-optimized/internal/glance/service"
-	"github.com/PaoloCastanon/modules-devstack-optimized/internal/glance/store"
 )
 
 func main() {
@@ -80,7 +79,7 @@ func run(args []string, logger *slog.Logger) (result error) {
 		if startup.Err() != nil {
 			return errors.New("store initialization cancelled")
 		}
-		if err = store.Initialize(c.Binary.Root, scope); err != nil {
+		if err = initStore(c.Binary, scope); err != nil {
 			return errors.New("store initialization failed; inspect partial setup without automatic repair")
 		}
 		logger.Info("store explicitly initialized")

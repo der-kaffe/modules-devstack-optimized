@@ -41,7 +41,7 @@ func verifyBackend(ctx context.Context, checks startupChecks) error {
 
 type binaryRuntime struct {
 	owner *service.UploadCoordinator
-	fs    *store.Filesystem
+	fs    store.Backend
 }
 
 func prepareBinary(ctx context.Context, c config.Config, r binaryRepository, scope func(context.Context) (string, error), logger *slog.Logger) (_ *binaryRuntime, result error) {
@@ -52,7 +52,7 @@ func prepareBinary(ctx context.Context, c config.Config, r binaryRepository, sco
 	if err != nil || expected != c.Binary.Scope {
 		return nil, errors.New("SQL/store scope mismatch or identity unavailable")
 	}
-	fs, err := store.NewFilesystem(c.Binary.Root, expected)
+	fs, err := openStore(c.Binary, expected)
 	if err != nil {
 		return nil, errors.New("cannot acquire initialized exclusive store")
 	}

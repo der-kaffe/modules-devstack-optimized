@@ -1,7 +1,7 @@
 # B26 — suite Glance Go: dos corridas reales consecutivas aprobadas
 
 Fecha local 2026-11-12 (America/Santiago), 2026-11-13 UTC en la VM.
-Revisión ejecutada: `c6684fd`, que es `local/asus-lab` con la rama
+Revisión ejecutada: `7557397`, que es `local/asus-lab` con la rama
 `feat/glance-integration-suite` integrada. Binario `cmd/glance` estático
 (`CGO_ENABLED=0`, Go 1.27.3).
 Laboratorio: VM `tt-openstack-lab` local con 4 vCPU y **6 GiB**, en un host de 7 GiB.

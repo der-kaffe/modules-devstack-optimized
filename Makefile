@@ -161,6 +161,18 @@ GLANCE_INTEGRATION_ARGS ?=
 glance-integration:
 	python3 scripts/integration/glance_suite.py $(GLANCE_INTEGRATION_ARGS)
 
+# Ceph RBD store for Glance Go, on the developer host (Docker, no VM, no sudo):
+# Ceph 1 MON/1 OSD + disposable MySQL, store tests and B25 end-to-end with
+# filesystem and rbd. Not part of check. Usage: docs/glance/ceph-rbd.md.
+.PHONY: glance-build-rbd glance-test-rbd
+GLANCE_RBD_TEST_OUTPUT ?= /tmp/glance-rbd-tests-$(shell date +%Y%m%dT%H%M%S)
+glance-build-rbd:
+	@mkdir -p bin
+	CGO_ENABLED=1 $(GLANCE_GO) build -p 1 -tags rbd -trimpath -buildvcs=false -o bin/glance-rbd ./cmd/glance
+
+glance-test-rbd:
+	bash infra/ceph-micro/run-tests.sh $(GLANCE_RBD_TEST_OUTPUT)
+
 # Explicit live host campaign; VM/SDK/code deployment must already be prepared.
 .PHONY: placement-benchmark
 PLACEMENT_BENCHMARK_ARGS ?=

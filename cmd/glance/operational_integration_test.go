@@ -19,7 +19,6 @@ import (
 	"github.com/PaoloCastanon/modules-devstack-optimized/internal/glance/model"
 	"github.com/PaoloCastanon/modules-devstack-optimized/internal/glance/repository/mysql"
 	"github.com/PaoloCastanon/modules-devstack-optimized/internal/glance/service"
-	"github.com/PaoloCastanon/modules-devstack-optimized/internal/glance/store"
 )
 
 // MUTATING. Independently authorized NEW EMPTY schema and EXISTING EMPTY private
@@ -75,11 +74,23 @@ func TestB25MySQLFilesystemHTTP(t *testing.T) {
 	if migration.QueryRowContext(ctx, "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE()").Scan(&tables) != nil || tables != 0 {
 		t.Fatal("NEW EMPTY schema required")
 	}
-	root := os.Getenv("GLANCE_GO_B25_TEST_ROOT")
-	entries, err := os.ReadDir(root)
-	if err != nil || len(entries) != 0 {
-		t.Fatal("EXISTING EMPTY dedicated root required")
+	// GLANCE_GO_B25_STORE=rbd runs the same pipeline on a NEW EMPTY RBD pool
+	// (binary built with -tags rbd, cluster from infra/ceph-micro).
+	backend := config.Binary{Backend: "filesystem"}
+	root := ""
+	if os.Getenv("GLANCE_GO_B25_STORE") == "rbd" {
+		backend = config.Binary{Backend: "rbd", RBDConf: os.Getenv("GLANCE_GO_RBD_TEST_CONF"), RBDUser: "admin", RBDPool: os.Getenv("GLANCE_GO_RBD_TEST_POOL")}
+		if n, err := rbdImageCount(backend); err != nil || n != 0 {
+			t.Fatal("NEW EMPTY dedicated rbd pool required", err)
+		}
+	} else {
+		root = os.Getenv("GLANCE_GO_B25_TEST_ROOT")
+		entries, err := os.ReadDir(root)
+		if err != nil || len(entries) != 0 {
+			t.Fatal("EXISTING EMPTY dedicated root required")
+		}
 	}
+	t.Log("STORE:", backend.Backend)
 	if err = mysql.Migrate(ctx, migration); err != nil {
 		t.Fatal(err)
 	}
@@ -94,11 +105,13 @@ func TestB25MySQLFilesystemHTTP(t *testing.T) {
 		t.Fatal("cannot record server version")
 	}
 	t.Log("MySQL effective version:", version, "scope:", rs)
-	if err = store.Initialize(root, rs); err != nil {
-		t.Fatal("store initialization failed")
+	backend.Root = root
+	if err = initStore(backend, rs); err != nil {
+		t.Fatal("store initialization failed", err)
 	}
 	c := testConfig()
-	c.Binary.Root, c.Binary.Scope = root, rs
+	c.Binary.Backend, c.Binary.Root, c.Binary.Scope = backend.Backend, root, rs
+	c.Binary.RBDConf, c.Binary.RBDUser, c.Binary.RBDPool = backend.RBDConf, backend.RBDUser, backend.RBDPool
 	c.DependencyTimeout = 5 * time.Second
 	c.RequestTimeout = 15 * time.Second
 	c.Binary.RecoveryTimeout = 30 * time.Second
@@ -254,10 +267,16 @@ func TestB25MySQLFilesystemHTTP(t *testing.T) {
 	if err != nil || !s.Deleted || s.Operation.Phase != model.DataCleaned {
 		t.Fatal("tombstone/cleanup not persisted")
 	}
-	for _, dir := range []string{"objects", "staging"} {
-		entries, err := os.ReadDir(root + "/" + dir)
-		if err != nil || len(entries) != 0 {
-			t.Fatal("filesystem cleanup not complete")
+	if backend.Backend == "rbd" {
+		if n, err := rbdImageCount(c.Binary); err != nil || n != 0 {
+			t.Fatal("rbd cleanup not complete", n, err)
+		}
+	} else {
+		for _, dir := range []string{"objects", "staging"} {
+			entries, err := os.ReadDir(root + "/" + dir)
+			if err != nil || len(entries) != 0 {
+				t.Fatal("filesystem cleanup not complete")
+			}
 		}
 	}
 	stop()

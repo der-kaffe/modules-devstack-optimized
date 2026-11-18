@@ -1038,7 +1038,7 @@ Revalidación del 28/10/2026: se ejecutó `GOMAXPROCS=2 GOTOOLCHAIN=local make c
     como unmatched y Apache tiene empates dentro del mismo segundo. Además, la
     `generation` de Placement sube con cada claim y release (11→12) y rompía el
     control. Todo corregido, con tests.
-- **Resultado: dos corridas consecutivas sobre `c6684fd` pasan 10/10 casos con
+- **Resultado: dos corridas consecutivas sobre `7557397` pasan 10/10 casos con
   limpieza completa.** Nova queda ACTIVE en 4,8 s y 4,4 s desde una imagen que
   sólo está en Glance Go. El flujo capturado tiene tres lecturas de metadatos,
   dos del esquema y una descarga completa de 21 692 416 B.
