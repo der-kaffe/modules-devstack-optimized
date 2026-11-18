@@ -300,3 +300,38 @@ func TestCapacityAndLifecycleConfiguration(t *testing.T) {
 		t.Fatal("closed upload accepted", err)
 	}
 }
+
+// Startup no longer re-hashes committed images (official Glance does no
+// startup scan): existence and size only, so startup is not O(total bytes).
+func TestRecoveryChecksCommittedImagesBySizeOnly(t *testing.T) {
+	for _, tc := range []string{"intact", "same-size-corruption", "truncated", "missing"} {
+		t.Run(tc, func(t *testing.T) {
+			u, d, fs, log := uploadFixture(t)
+			uploadSeed(d, model.DataCommitted)
+			fs.blob = append([]byte{}, uploadPayload...)
+			switch tc {
+			case "same-size-corruption":
+				fs.blob[0] ^= 0xff
+			case "truncated":
+				fs.blob = fs.blob[:len(fs.blob)-1]
+			case "missing":
+				fs.blob = nil
+			}
+			u = uploadRestart(t, u, d, fs)
+			log.reset()
+			report, err := u.RecoverUploads(context.Background())
+			if tc == "intact" || tc == "same-size-corruption" {
+				if err != nil || report.Kept != 1 {
+					t.Fatal(report, err)
+				}
+			} else if !errors.Is(err, ErrUploadReconciliation) {
+				t.Fatal("missing or truncated committed content must stop startup", err)
+			}
+			for _, call := range log.snapshot() {
+				if call == "fs.Open" {
+					t.Fatal("startup re-read a committed image", log.snapshot())
+				}
+			}
+		})
+	}
+}

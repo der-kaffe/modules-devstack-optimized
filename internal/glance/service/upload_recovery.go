@@ -157,7 +157,7 @@ func (u *UploadCoordinator) RecoverUploads(ctx context.Context) (report UploadRe
 				if !committed(s, key, content) {
 					return report, ErrUploadReconciliation
 				}
-				if u.verifyBlob(ctx, key, store.Info{Size: content.Size, Checksum: content.Checksum, SHA512: content.SHA512}) != nil {
+				if u.committedBlobPresent(ctx, key, content.Size) != nil {
 					return report, ErrUploadReconciliation
 				}
 				report.Kept++

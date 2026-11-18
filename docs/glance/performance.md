@@ -22,6 +22,7 @@ La referencia se leyó en el código instalado en la VM:
 | 5 | Publish releía y rehasheaba lo que Stage acababa de hashear | Una sola pasada | Se omite la relectura sólo si el `.ready` es el mismo archivo medido (dev, inodo, tamaño y ctime) y el recibo coincide. Si no, se verifica completo |
 | 6 | 2 transferencias concurrentes por defecto | Sin ese límite (sólo los workers) | 16 (de 1 a 64) |
 | 7 | Cliente Keystone con 2 conexiones ociosas por host | requests/keystoneauth: 10 | 32 |
+| 8 | Al arrancar rehasheaba cada imagen activa: el arranque era proporcional al total de bytes | No hace escaneo al arrancar | Las imágenes confirmadas se comprueban por existencia y tamaño; las cargas a medio camino se resuelven como antes |
 
 Lo que **no** cambió: la API, los status HTTP, el JSON, la autorización, el
 modelo de estados, la recuperación al arranque y las garantías de escritura
@@ -58,3 +59,19 @@ Los 176 ms de antes coinciden con el TTFB de 64 MiB que midió la campaña v3.
 **Alcance:** los resultados de la campaña `glance-compact-v3` corresponden a la
 revisión medida `d3286a6`, no a esta. Una campaña nueva (de Paolo) tendría que
 usar una versión de protocolo nueva.
+
+## Auditoría del resto contra Glance oficial
+
+Se aplicó la regla a cada operación restante. Sin una mejora segura, se deja.
+
+| Operación | ¿Igual al original? | ¿Más lento? | Decisión |
+|---|---|---|---|
+| Listar imágenes | Distinto (SQL propio) | No: en la v3, Go fue de 2,9 a 4,5× más rápido | Se deja |
+| Crear, PATCH y DELETE de metadatos | Distinto | No: en la v3, de 4,1 a 7,5× más rápido | Se deja |
+| Carga: fsync del archivo y los directorios | Distinto: glance_store no hace fsync | No: Go ya era más rápido en las cargas, y el fsync le da durabilidad ante caídas | Se deja (más seguro y más rápido) |
+| Lectura de metadatos en una transacción de sólo lectura (3 SELECT) | Distinto: el ORM sin transacción explícita | No: ahora es de 1,9 ms p50 | Se deja (lectura consistente) |
+| Esquemas `/v2/schemas/*` | Igual: se construyen en cada solicitud | No | Se deja |
+| Descubrimiento `/` y `/versions` | Igual: público, 300/200 | No | Se deja |
+| Log de cada solicitud (JSON a journald) | Equivalente: el original también registra cada solicitud | No | Se deja |
+| Capacidad compartida PUT/GET/DELETE (16) | Distinto: el original no tiene ese límite | No es velocidad, es coordinación (recuperación y cierre) | Se deja como diferencia conocida; es configurable de 1 a 64 |
+| Resolución de un commit incierto (`verifyBlob`) | Distinto | Sólo ocurre ante un error de commit | Se deja: vale más la seguridad |

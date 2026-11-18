@@ -441,6 +441,27 @@ func (u *UploadCoordinator) Upload(ctx context.Context, who auth.Identity, value
 	return content, nil
 }
 
+// committedBlobPresent is the startup check for already committed images:
+// content exists with its committed size. Official Glance does no startup scan
+// at all; re-hashing every image made startup O(total bytes) (was verifyBlob).
+func (u *UploadCoordinator) committedBlobPresent(ctx context.Context, key store.Key, size int64) error {
+	f, actual, err := u.bytes.OpenStream(ctx, key)
+	if err != nil {
+		if f != nil {
+			_ = f.Close()
+		}
+		return err
+	}
+	if f == nil {
+		return store.ErrIntegrity
+	}
+	closeErr := f.Close()
+	if actual != size {
+		return store.ErrIntegrity
+	}
+	return closeErr
+}
+
 func (u *UploadCoordinator) verifyBlob(ctx context.Context, key store.Key, expected store.Info) error {
 	f, actual, err := u.bytes.Open(ctx, key)
 	if err != nil {

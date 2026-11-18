@@ -44,3 +44,16 @@ Corridas consecutivas con el binario nuevo:
 
 - VM de 6 GiB, cliente dentro de la VM y pocas repeticiones: los números sirven para comparar antes contra ahora, no para compararse con la campaña v3 ni para afirmar significación estadística.
 - La caché de tokens y la descarga sin rehash cambian garantías de forma deliberada, para igualar al Glance oficial (ver `performance.md`).
+
+## Verificación final (`final/`), tras la auditoría
+
+Binario `glance` sha256 `4fb59f8f…`, que incluye el arranque sin rehash.
+Revisión `f04fd69` en la VM.
+
+| Corrida | Resultado |
+|---|---|
+| `glance-1`, `glance-2` | 10/10 y 10/10, limpieza completa |
+| `joint-1`, `joint-2` | 14/14 y 14/14, limpieza completa |
+| `qc` (comparación rápida) | metadatos p50 1,53 ms; 1 181 req/s con 16 hilos; descarga de 64 MiB en 54,6 ms (primer byte 2,7 ms); carga de 64 MiB en 492 ms |
+
+`make check` OK y `make glance-test-rbd` 9/9 sobre el mismo código.

@@ -1085,3 +1085,7 @@ Revalidación del 28/10/2026: se ejecutó `GOMAXPROCS=2 GOTOOLCHAIN=local make c
   [Evidencia](../evidence/sprint5/glance-performance-20261118/README.md).
 - `make glance-test-rbd` (incluye ahora 5 pruebas de integración MySQL): 9/9.
   Los resultados v3 siguen correspondiendo a `d3286a6`.
+- Auditoría contra Glance oficial: el arranque ya no rehashea cada imagen
+  confirmada (existencia y tamaño, como el original, que no escanea nada). El
+  resto se dejó porque es igual al original o más rápido; la tabla está en
+  `docs/glance/performance.md`.
