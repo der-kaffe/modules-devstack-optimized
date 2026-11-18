@@ -147,39 +147,87 @@ def apache_events(lines, since_us, until_us):
     return events
 
 
+# Apache's %t is the second the request ARRIVED (floored); Glance Go's journald
+# record is written when the response completes. A matching Apache line is
+# therefore never later than the response (small clock slack) and at most one
+# second plus the request's own duration (plus journald/proxy slack) earlier.
+APACHE_EARLY_SLACK_US = 250_000
+APACHE_LATE_SLACK_US = 1_000_000
+
+
+def apache_fits(event, line):
+    if line['method'] != event['method'] or line['status'] != event['status']:
+        return False
+    if not same_route(event['route'], line['route']):
+        return False
+    lag = event['ts_us'] - line['ts_us']
+    took = int((event.get('duration_ms') or 0) * 1000)
+    return -APACHE_EARLY_SLACK_US <= lag <= 1_000_000 + took + APACHE_LATE_SLACK_US
+
+
+def _max_matching(order, candidates):
+    """Maximum bipartite matching by augmenting paths. Events and their
+    candidate lines are tried in time order, so identical requests pair first
+    in, first out. Returns {event index: line index}."""
+    owner = {}
+
+    def augment(event, seen):
+        for line in candidates[event]:
+            if line in seen:
+                continue
+            seen.add(line)
+            if line not in owner or augment(owner[line], seen):
+                owner[line] = event
+                return True
+        return False
+
+    for event in order:
+        augment(event, set())
+    return {event: line for line, event in owner.items()}
+
+
+def match_apache(events, pool):
+    """Pair the Go responses not explained by a request id with Apache lines.
+
+    First only OpenStack-client lines (a suite request just before the window
+    can share the second with Nova's identical one), then the remaining lines
+    for what is still unpaired. A real run showed why this is a matching and not
+    "closest line first": with floored seconds, the first response took the
+    second one's line, and the last had no candidate left within reach.
+    """
+    fits = {e: [i for i, line in enumerate(pool) if apache_fits(events[e], line)] for e in events}
+    order = sorted(events, key=lambda e: events[e]['ts_us'])
+    first = _max_matching(order, {e: [i for i in fits[e] if pool[i]['user_agent_class'] in NOVA_AGENTS] for e in order})
+    used = set(first.values())
+    rest = [e for e in order if e not in first]
+    second = _max_matching(rest, {e: [i for i in fits[e] if i not in used] for e in rest})
+    return {**first, **second}
+
+
 def correlate(go, calls, requests, apache=()):
     """One timeline entry per Glance Go response (authoritative status/bytes/time).
 
     Attribution, strongest first: Nova keystoneauth "used request id" line
     (exact; also yields header presence) → Apache line with the same method,
-    route and status within 2 s (client class only) → 'unattributed'.
+    route and status inside the arrival-second bound (client class only; see
+    match_apache) → 'unattributed'.
     """
     by_id = {c['request_id']: c for c in calls}
     pool = sorted(apache, key=lambda e: e['ts_us'])
-    used = set()
+    ordered = sorted(go, key=lambda e: e['ts_us'])
+    paired = match_apache({n: e for n, e in enumerate(ordered) if e['request_id'] not in by_id}, pool)
     timeline = []
-    for event in sorted(go, key=lambda e: e['ts_us']):
+    for n, event in enumerate(ordered):
         call = by_id.get(event['request_id'])
         caller, how, service_token = 'unattributed', None, None
         if call:
             caller, how = call['source'], 'request-id'
             presence = _nearest_request(call, requests)
             service_token = presence['x_service_token'] if presence else None
-        else:
-            # Apache has second resolution, so a request of the suite made just
-            # before the window can share the second with Nova's identical one.
-            # Prefer OpenStack-client lines, then the closest in time.
-            candidates = [index for index, line in enumerate(pool)
-                          if index not in used and line['method'] == event['method']
-                          and same_route(event['route'], line['route']) and line['status'] == event['status']
-                          and abs(line['ts_us'] - event['ts_us']) <= 2_000_000]
-            if candidates:
-                index = min(candidates, key=lambda i: (pool[i]['user_agent_class'] not in NOVA_AGENTS,
-                                                       abs(pool[i]['ts_us'] - event['ts_us'])))
-                used.add(index)
-                cls = pool[index]['user_agent_class']
-                caller = 'nova' if cls in NOVA_AGENTS else cls
-                how = 'apache'
+        elif n in paired:
+            cls = pool[paired[n]]['user_agent_class']
+            caller = 'nova' if cls in NOVA_AGENTS else cls
+            how = 'apache'
         timeline.append({'ts_us': event['ts_us'], 'caller': caller, 'attribution': how,
                          'method': event['method'], 'route': event['route'], 'status': event['status'],
                          'response_bytes': event['response_bytes'], 'glance_duration_ms': event['duration_ms'],

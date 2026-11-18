@@ -113,8 +113,10 @@ class FlowAcceptanceTests(unittest.TestCase):
 
     def test_apache_fallback_when_keystoneauth_debug_is_off(self):
         go = flow.go_events(GO[1:])
+        # Apache stamps the floored arrival second: the 180 ms download that
+        # completed at T0+4.5 s arrived at T0+4.32 s, logged as T0+4 s.
         apache = [{'ts_us': T0 + 4_000_000, 'method': 'GET', 'route': '/v2/images/{id}', 'status': 200, 'user_agent_class': 'openstack-client'},
-                  {'ts_us': T0 + 5_000_000, 'method': 'GET', 'route': '/v2/images/{id}/file', 'status': 200, 'user_agent_class': 'openstack-client'}]
+                  {'ts_us': T0 + 4_000_000, 'method': 'GET', 'route': '/v2/images/{id}/file', 'status': 200, 'user_agent_class': 'openstack-client'}]
         summary = flow.summarize(flow.correlate(go, [], [], apache), SIZE)
         self.assertEqual((summary['attributed_by_apache'], summary['request_id_correlated']), (2, 0))
         self.assertIsNone(summary['composite_auth_seen'])  # unknown, not False
@@ -129,6 +131,34 @@ class FlowAcceptanceTests(unittest.TestCase):
         timeline = flow.correlate(go, [], [], apache)
         self.assertEqual(timeline[0]['caller'], 'nova')
         self.assertEqual(flow.agent_class('-'), 'unknown')
+
+    def test_floored_seconds_pair_every_response_like_the_real_run(self):
+        # Real run (qc-r1, 2026-11-18): three identical Nova GETs, the first at
+        # S.95 and the others at S+1.95 and S+2.05, logged by Apache as S, S+1
+        # and S+2. "Closest line first" gave the first response the S+1 line,
+        # the second S+2, and left the third unattributed (S is 2.05 s away).
+        base = T0 + 950_000
+        go = flow.go_events([go_line(base, RID_API, 'GET', '/v2/images/{id}', 200, 812, ms=27),
+                             go_line(base + 999_100, RID_META, 'GET', '/v2/images/{id}', 200, 812, ms=20),
+                             go_line(base + 1_101_700, RID_FILE, 'GET', '/v2/images/{id}', 200, 812, ms=3)])
+        line = {'method': 'GET', 'route': '/v2/images/{id}', 'status': 200, 'user_agent_class': 'openstack-client'}
+        apache = [{**line, 'ts_us': T0 + n * 1_000_000} for n in range(3)]
+        timeline = flow.correlate(go, [], [], apache)
+        self.assertEqual([e['caller'] for e in timeline], ['nova', 'nova', 'nova'])
+        self.assertEqual(flow.summarize(timeline, SIZE)['non_nova_glance_requests'], 0)
+
+    def test_apache_line_never_pairs_with_an_earlier_response(self):
+        # A line stamped after the response, or more than ~1 s plus the
+        # request's duration before it, is another request.
+        event = {'ts_us': T0 + 500_000, 'method': 'GET', 'route': '/v2/images/{id}', 'status': 200, 'duration_ms': 4}
+        line = {'method': 'GET', 'route': '/v2/images/{id}', 'status': 200}
+        self.assertTrue(flow.apache_fits(event, {**line, 'ts_us': T0}))
+        self.assertFalse(flow.apache_fits(event, {**line, 'ts_us': T0 + 1_000_000}))
+        self.assertFalse(flow.apache_fits(event, {**line, 'ts_us': T0 - 2_000_000}))
+        self.assertFalse(flow.apache_fits(event, {**line, 'ts_us': T0, 'status': 404}))
+        # A long download legitimately arrived well before it completed.
+        slow = {**event, 'route': '/v2/images/{id}/file', 'ts_us': T0 + 6_000_000, 'duration_ms': 5_000}
+        self.assertTrue(flow.apache_fits(slow, {**line, 'route': '/v2/images/{id}/file', 'ts_us': T0}))
 
     def test_partial_download_or_foreign_traffic_is_not_a_pass(self):
         calls, requests = flow.nova_events(NOVA)
@@ -274,6 +304,56 @@ class SuiteGuardTests(unittest.TestCase):
                                    {'show': {'p50': 2.0}, 'download_64m': {'p50': 60.0}})
         self.assertEqual((rows['show']['go_slower'], rows['download_64m']['go_slower']), (False, True))
         self.assertEqual(rows['download_64m']['go_over_original'], 1.2)
+
+    def test_nova_ready_needs_fresh_heartbeats_after_boot(self):
+        boot = 1_795_033_087  # 2026-11-18T20:18:07Z, the VM boot measured above
+        after, before = '2026-11-18T20:19:02.000000', '2026-11-18T18:31:44.000000'
+        assert suite.reported_epoch(after) > boot > suite.reported_epoch(before)
+        up = [{'binary': b, 'status': 'enabled', 'state': 'up', 'updated_at': after} for b in suite.NOVA_BINARIES]
+        self.assertEqual(suite.nova_not_ready(up, boot), [])
+        # Measured right after start: compute still down from the previous boot.
+        down = up[:2] + [{**up[2], 'state': 'down', 'updated_at': before}]
+        self.assertEqual(suite.nova_not_ready(down, boot), ['nova-compute'])
+        # 'up' from a heartbeat before a quick reboot is not ready either.
+        stale = up[:2] + [{**up[2], 'updated_at': before}]
+        self.assertEqual(suite.nova_not_ready(stale, boot), ['nova-compute'])
+        # A second conductor still down blocks; a disabled one does not count.
+        self.assertEqual(suite.nova_not_ready(up + [{**up[0], 'state': 'down'}], boot), ['nova-conductor'])
+        self.assertEqual(suite.nova_not_ready(up + [{**up[0], 'status': 'disabled', 'state': 'down'}], boot), [])
+        self.assertEqual(suite.nova_not_ready(up[:2], boot), ['nova-compute'])
+        self.assertEqual(suite.reported_epoch('2026-11-18T20:19:02Z'), suite.reported_epoch(after))
+
+    def test_wait_schedulable_polls_then_fails_closed_with_the_reason(self):
+        boot = 1_795_033_087  # 2026-11-18T20:18:07Z, the VM boot measured above
+        ok = [{'binary': b, 'status': 'enabled', 'state': 'up', 'updated_at': '2026-11-18T20:19:02'} for b in suite.NOVA_BINARIES]
+        answers = [RuntimeError('503'), ok[:2], ok]
+        now = [0.0]
+        def sleep(seconds):
+            now[0] += seconds
+        def listing():
+            answer = answers.pop(0)
+            if isinstance(answer, Exception):
+                raise answer
+            return answer
+        self.assertEqual(suite.wait_schedulable(listing, boot, 60, clock=lambda: now[0], sleep=sleep), 10.0)
+        now[0] = 0.0
+        with self.assertRaisesRegex(AssertionError, 'not ready: nova-compute'):
+            suite.wait_schedulable(lambda: ok[:2], boot, 12, clock=lambda: now[0], sleep=sleep)
+
+    def test_boot_fault_keeps_code_and_first_line_without_ids(self):
+        server = SimpleNamespace(fault={'code': 500, 'message': 'No valid host was found. ' + IMAGE + '\nTraceback secret',
+                                        'details': 'Traceback (most recent call last): password=x'})
+        fault = suite.boot_fault(server)
+        self.assertEqual(fault, {'code': 500, 'message': 'No valid host was found. {id}'})
+        self.assertIsNone(suite.boot_fault(SimpleNamespace(fault=None)))
+
+    def test_nova_ready_wait_is_bounded(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            args = SimpleNamespace(allow_mutations=True, binary=Path(__file__), wait_seconds=180, lease_seconds=900,
+                                   payload_mib=[1], output=Path(tmp) / 'out', work_root=Path('/tmp/tt-placement-x'),
+                                   nova_ready_seconds=601)
+            with self.assertRaisesRegex(ValueError, 'bounded wait for Nova'):
+                suite.run(args)
 
     def test_server_image_id_accepts_sdk_shapes(self):
         self.assertEqual(suite.server_image_id(SimpleNamespace(image={'id': IMAGE})), IMAGE)

@@ -166,6 +166,69 @@ def file_digest(path):
     return {'size': size, **{name: digest.hexdigest() for name, digest in hashes.items()}}
 
 
+# Right after the VM starts, RabbitMQ opens ~40 s later and nova-compute
+# reports ~65 s later (measured 2026-11-18). A boot before that ends in ERROR
+# within seconds ("Filter ComputeFilter returned 0 hosts", NoValidHost), which
+# says nothing about Glance. The suite waits for these before touching anything.
+NOVA_BINARIES = ('nova-conductor', 'nova-scheduler', 'nova-compute')
+
+
+def host_boot_epoch(stat=Path('/proc/stat')):
+    for line in stat.read_text().splitlines():
+        if line.startswith('btime '):
+            return int(line.split()[1])
+    raise ValueError('btime missing from /proc/stat')
+
+
+def reported_epoch(value):
+    if not value:
+        return None
+    stamp = datetime.datetime.fromisoformat(str(value).replace('Z', '+00:00'))
+    if stamp.tzinfo is None:  # Nova reports UTC without an offset
+        stamp = stamp.replace(tzinfo=datetime.timezone.utc)
+    return stamp.timestamp()
+
+
+def nova_not_ready(services, booted_epoch):
+    """Binaries that cannot serve a boot yet (empty = schedulable).
+
+    Each needs at least one enabled service, and every enabled one must be up
+    with a heartbeat from after this host booted: a heartbeat from before a
+    quick reboot still reads 'up' for service_down_time."""
+    missing = []
+    for binary in NOVA_BINARIES:
+        enabled = [s for s in services if s['binary'] == binary and s['status'] == 'enabled']
+        fresh = [s for s in enabled if s['state'] == 'up' and (reported_epoch(s['updated_at']) or 0) >= booted_epoch]
+        if not enabled or len(fresh) != len(enabled):
+            missing.append(binary)
+    return missing
+
+
+def wait_schedulable(list_services, booted_epoch, timeout_s, clock=time.monotonic, sleep=time.sleep, every_s=5):
+    """Poll until Nova can schedule; returns the seconds waited. While the
+    API itself is still starting, a failed listing counts as not ready."""
+    started = clock()
+    while True:
+        try:
+            missing = nova_not_ready(list_services(), booted_epoch)
+        except Exception as error:  # noqa: BLE001 - API not answering yet
+            missing = ['nova-api (%s)' % type(error).__name__]
+        if not missing:
+            return round(clock() - started, 1)
+        require(clock() - started < timeout_s, 'Nova schedulable before the boot; not ready: ' + ', '.join(missing))
+        sleep(every_s)
+
+
+def boot_fault(server):
+    """Nova's fault for an ERROR server: its code and first line, with IDs
+    replaced (e.g. 'No valid host was found. ...'). Never the details."""
+    fault = getattr(server, 'fault', None)
+    if not isinstance(fault, dict):
+        return None
+    lines = str(fault.get('message') or '').splitlines()
+    return {'code': fault.get('code'), 'message': re.sub(glance_flow.UUID, '{id}', lines[0] if lines else '')[:160]}
+
+
 def server_image_id(server):
     image = server.image
     if isinstance(image, dict):
@@ -345,8 +408,19 @@ class Suite(Session):
 
     # -- cases, executed in CASES order ------------------------------------
     def case_preflight_and_isolation(self):
+        waited = self.wait_for_nova()
         self.prepare()
-        return {'original_images': len(self.original['images'])}
+        return {'original_images': len(self.original['images']), 'nova_ready_wait_s': waited}
+
+    def wait_for_nova(self):
+        connection, _, _ = sdk_connection()
+        try:
+            def services():
+                return [{'binary': s.binary, 'status': s.status, 'state': s.state, 'updated_at': s.updated_at}
+                        for s in connection.compute.services()]
+            return wait_schedulable(services, host_boot_epoch(), getattr(self.args, 'nova_ready_seconds', 240))
+        finally:
+            connection.close()
 
     def case_auth_fail_closed(self):
         bogus = 'tt-invalid-' + uuid.uuid4().hex
@@ -423,6 +497,8 @@ class Suite(Session):
                 break
             time.sleep(2)
         self.report['boot_states'] = states
+        if states and states[-1]['status'] == 'ERROR':
+            self.report['boot_fault'] = boot_fault(current)
         self.flavor = flavor
         require(states and states[-1]['status'] == 'ACTIVE', 'server reached ACTIVE from the Go image')
         require(current.project_id == project and server_image_id(current) == self.nova_image['id'], 'server owner/image')
@@ -816,6 +892,8 @@ def run(args):
         raise ValueError('canonical owned private work root required')
     if not args.binary.is_file() or not 10 <= args.wait_seconds <= 300 or not 300 <= args.lease_seconds <= 1800:
         raise ValueError('binary, bounded wait and bounded route lease required')
+    if not 0 <= getattr(args, 'nova_ready_seconds', 240) <= 600:
+        raise ValueError('bounded wait for Nova required')
     if not args.payload_mib or any(size not in (1, 16, 64) for size in args.payload_mib):
         raise ValueError('payload sizes limited to 1, 16 and 64 MiB')
     if getattr(args, 'with_placement_go', False) and not (args.placement_binary and args.placement_binary.is_file()):
@@ -839,6 +917,8 @@ def main():
                         help='direct round-trip sizes; 1 keeps the run light, 1 16 64 matches the campaign')
     parser.add_argument('--wait-seconds', type=int, default=180)
     parser.add_argument('--lease-seconds', type=int, default=900)
+    parser.add_argument('--nova-ready-seconds', type=int, default=240,
+                        help='wait this long for Nova to be schedulable before any change (0-600)')
     parser.add_argument('--audit', action='store_true',
                         help='measure the same operations on official Glance and on Glance Go (public route)')
     parser.add_argument('--quick-compare', action='store_true',

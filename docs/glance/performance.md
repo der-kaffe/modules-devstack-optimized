@@ -60,7 +60,7 @@ Los 176 ms de antes coinciden con el TTFB de 64 MiB que midió la campaña v3.
 revisión medida `d3286a6`, no a esta. Una campaña nueva (de Paolo) tendría que
 usar una versión de protocolo nueva.
 
-## Auditoría medida contra Glance oficial (2026-11-19)
+## Auditoría medida contra Glance oficial (2026-11-18)
 
 Se midieron las mismas 14 operaciones en el Glance oficial y en Glance Go, por
 la misma ruta pública, con el mismo cliente y el mismo token, en dos corridas:
@@ -74,7 +74,7 @@ la misma ruta pública, con el mismo cliente y el mismo token, en dos corridas:
 **Go no es más lento en ninguna.** La razón Go/oficial va de 0,02 (crear) a 0,66
 (descarga de 64 MiB), y con 16 hilos Go atiende 1 149 req/s frente a 215. Así
 que, por la regla, no queda nada que llevar al original. Evidencia en
-[glance-audit-20261119](../../evidence/sprint5/glance-audit-20261119/README.md).
+[glance-audit-20261118](../../evidence/sprint5/glance-audit-20261118/README.md).
 
 ### Revisión por código (previa a la medición)
 
@@ -93,7 +93,7 @@ Se aplicó la regla a cada operación restante. Sin una mejora segura, se deja.
 | Capacidad compartida PUT/GET/DELETE (16) | Distinto: el original no tiene ese límite | No es velocidad, es coordinación (recuperación y cierre) | Se deja como diferencia conocida; es configurable de 1 a 64 |
 | Resolución de un commit incierto (`verifyBlob`) | Distinto | Sólo ocurre ante un error de commit | Se deja: vale más la seguridad |
 
-## Ronda 2 (2026-11-19): revisión de todo el código de Glance Go
+## Ronda 2 (2026-11-18): revisión de todo el código de Glance Go
 
 Cada hallazgo se calificó como alto, medio o bajo. Sólo se aplicó lo que mejora
 sin romper nada y sigue igual o más cerca del original.
@@ -115,4 +115,4 @@ sin romper nada y sigue igual o más cerca del original.
 metadatos 1,57 → 1,18 ms y 1 099 → 1 254 req/s con 16 hilos. La auditoría contra
 el oficial vuelve a dar ninguna operación más lenta (carga de 64 MiB en 0,31–0,35
 del oficial). La regresión con Nova pasa en los dos modos.
-[Evidencia](../../evidence/sprint5/glance-perf2-20261119/README.md).
+[Evidencia](../../evidence/sprint5/glance-perf2-20261118/README.md).

@@ -1,6 +1,6 @@
 # Auditoría medida: Glance oficial frente a Glance Go
 
-Fecha 2026-11-19 (UTC en la VM). VM local `tt-openstack-lab` con 6 GiB, Keystone y
+Fecha 2026-11-18 (UTC en la VM; 14:57 en Chile). VM local `tt-openstack-lab` con 6 GiB, Keystone y
 Nova reales.
 - Glance oficial `a3e5f490`, con su configuración real de DevStack (incluidas las notificaciones).
 - Glance Go: binario `4fb59f8f…` (`main` `594a024`). Código de la suite `b3ef1e4`.

@@ -1089,12 +1089,12 @@ Revalidación del 28/10/2026: se ejecutó `GOMAXPROCS=2 GOTOOLCHAIN=local make c
   confirmada (existencia y tamaño, como el original, que no escanea nada). El
   resto se dejó porque es igual al original o más rápido; la tabla está en
   `docs/glance/performance.md`.
-- 2026-11-19, auditoría medida (`glance_suite.py --audit`): las mismas 14
+- 2026-11-18, auditoría medida (`glance_suite.py --audit`): las mismas 14
   operaciones en el Glance oficial y en Glance Go, por la ruta pública, en dos
   corridas. Go no es más lento en ninguna (Go/oficial entre 0,02 y 0,66; 1 149
   frente a 215 req/s con 16 hilos), así que no hubo cambios adicionales.
-  [Evidencia](../evidence/sprint5/glance-audit-20261119/README.md).
-- 2026-11-19, ronda 2 de optimización (todo Glance Go, calificado alto, medio o
+  [Evidencia](../evidence/sprint5/glance-audit-20261118/README.md).
+- 2026-11-18, ronda 2 de optimización (todo Glance Go, calificado alto, medio o
   bajo; detalle en `docs/glance/performance.md`):
   - aplicados: A1 (sin relectura tras `Publish` exitoso), A2 (MD5 en paralelo),
     A3 (statements preparados), M1 (`INSERT` multi-fila), M2 (GET en 1
@@ -1106,4 +1106,27 @@ Revalidación del 28/10/2026: se ejecutó `GOMAXPROCS=2 GOTOOLCHAIN=local make c
   B26: Glance Go 10/10 ×2 y conjunto 14/14 ×2. La primera corrida falló por
   RabbitMQ arrancando justo tras encender la VM, sin relación con Glance.
   `make check` OK y `glance-test-rbd` 9/9.
-  [Evidencia](../evidence/sprint5/glance-perf2-20261119/README.md).
+  [Evidencia](../evidence/sprint5/glance-perf2-20261118/README.md).
+- 2026-11-18, correcciones de la suite B26 (no de Glance Go). Los dos fallos de
+  la ronda 2 venían de la herramienta de prueba:
+  - **Espera a Nova antes del boot.** Tras encender la VM, `nova-compute` queda
+    "down" unos 65 s y el boot terminaba en NoValidHost ("ComputeFilter returned
+    0 hosts"). Ahora la suite espera heartbeats frescos de conductor, scheduler
+    y compute (`--nova-ready-seconds`, 240 s) y, si el servidor queda en ERROR,
+    registra la falla de Nova saneada.
+  - **Atribución de la captura como matching máximo**, respetando que Apache
+    registra el segundo de llegada truncado. La versión anterior dejaba una GET
+    de Nova "sin atribuir".
+
+  Verificación:
+  - `fx-fresh` se lanzó con la VM recién encendida: esperó 22,7 s a Nova y pasó
+    10/10. También pasaron Glance Go 10/10, el modo conjunto 14/14 ×2 y la
+    comparación rápida 11/11.
+  - `qc-r1`, reprocesado con sus logs reales, pasa de rechazado a aceptado; las
+    otras 8 capturas no cambian.
+  - `make check` OK.
+
+  Corrección de fechas: la auditoría y la ronda 2 se rotularon con el
+  2026-11-19, pero las corridas fueron el 2026-11-18. Las carpetas se
+  renombraron a `glance-audit-20261118` y `glance-perf2-20261118`.
+  [Evidencia](../evidence/sprint5/glance-suite-fix-20261118/README.md).
