@@ -56,7 +56,7 @@ func prepareBinary(ctx context.Context, c config.Config, r binaryRepository, sco
 	if err != nil {
 		return nil, errors.New("cannot acquire initialized exclusive store")
 	}
-	owner, err := service.NewUploadCoordinator(r, r, fs, service.UploadLimits{MaxBytes: c.Binary.MaxUploadBytes, MaxConcurrent: c.Binary.MaxConcurrent, ResolutionTimeout: c.Binary.ResolutionTimeout, RecoveryTimeout: c.Binary.RecoveryTimeout})
+	owner, err := service.NewUploadCoordinator(r, r, fs, service.UploadLimits{MaxBytes: c.Binary.MaxUploadBytes, MaxConcurrent: c.Binary.MaxConcurrent, MaxDownloadStreams: c.Binary.MaxDownloadStreams, ResolutionTimeout: c.Binary.ResolutionTimeout, RecoveryTimeout: c.Binary.RecoveryTimeout})
 	if err != nil {
 		_ = fs.Close()
 		return nil, errors.New("cannot construct transfer owner")

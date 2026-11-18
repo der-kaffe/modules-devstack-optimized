@@ -1,6 +1,7 @@
 package config
 
 import (
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -127,4 +128,50 @@ func TestRBDBackendConfiguration(t *testing.T) {
 			t.Fatal("silently ignored rbd store")
 		}
 	})
+}
+
+// Downloads are queued like official Glance's workers on the filesystem store
+// (measured there); RBD keeps no extra cap unless configured.
+func TestDownloadStreamsDefaultAndBounds(t *testing.T) {
+	fs := func() map[string]string {
+		e := environment(t)
+		e["GLANCE_GO_BINARY_ENABLED"] = "true"
+		e["GLANCE_GO_STORE_ROOT"] = "/private/glance"
+		e["GLANCE_GO_STORE_SCOPE"] = "00000000-0000-5000-8000-000000000001"
+		return e
+	}
+	load := func(e map[string]string) (Config, error) { return Load(func(k string) string { return e[k] }, "serve") }
+	c, err := load(fs())
+	want := min(max(2, runtime.GOMAXPROCS(0)/2), 16)
+	if err != nil || c.Binary.MaxDownloadStreams != want {
+		t.Fatalf("filesystem default %d, want %d (%v)", c.Binary.MaxDownloadStreams, want, err)
+	}
+	e := fs()
+	e["GLANCE_GO_MAX_CONCURRENT_TRANSFERS"] = "1"
+	if c, err = load(e); err != nil || c.Binary.MaxDownloadStreams != 1 {
+		t.Fatal("default must not exceed the shared transfer capacity", c.Binary.MaxDownloadStreams, err)
+	}
+	for value, streams := range map[string]int{"0": 0, "5": 5, "16": 16} {
+		e := fs()
+		e["GLANCE_GO_MAX_DOWNLOAD_STREAMS"] = value
+		if c, err = load(e); err != nil || c.Binary.MaxDownloadStreams != streams {
+			t.Fatal("explicit streams", value, err)
+		}
+	}
+	for _, value := range []string{"-1", "17", "bad"} {
+		e := fs()
+		e["GLANCE_GO_MAX_DOWNLOAD_STREAMS"] = value
+		if _, err = load(e); err == nil {
+			t.Fatal("accepted streams", value)
+		}
+	}
+	r := environment(t)
+	for k, v := range map[string]string{"GLANCE_GO_BINARY_ENABLED": "true", "GLANCE_GO_STORE_BACKEND": "rbd",
+		"GLANCE_GO_STORE_SCOPE": "00000000-0000-5000-8000-000000000001", "GLANCE_GO_RBD_CONF": "/etc/ceph/ceph.conf",
+		"GLANCE_GO_RBD_USER": "glance", "GLANCE_GO_RBD_POOL": "images"} {
+		r[k] = v
+	}
+	if c, err = load(r); err != nil || c.Binary.MaxDownloadStreams != 0 {
+		t.Fatal("rbd must keep downloads unqueued by default", err)
+	}
 }

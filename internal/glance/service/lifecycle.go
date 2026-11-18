@@ -7,6 +7,15 @@ func (u *UploadCoordinator) notifyLocked() {
 	u.changed = make(chan struct{})
 }
 
+// haltLocked wakes every download waiting for a stream so it fails fast.
+func (u *UploadCoordinator) haltLocked() {
+	u.haltOnce.Do(func() {
+		if u.halt != nil {
+			close(u.halt)
+		}
+	})
+}
+
 // StopAdmission is irreversible for this owner. Existing operations keep their
 // contexts and bounded detached compensation. The HTTP owner first drains them,
 // then cancels/closes network I/O if its grace expires. Never release the flock
@@ -15,6 +24,7 @@ func (u *UploadCoordinator) StopAdmission() {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	u.stopping = true
+	u.haltLocked()
 	u.notifyLocked()
 }
 

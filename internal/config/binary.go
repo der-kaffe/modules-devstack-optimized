@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -16,11 +17,14 @@ import (
 type Binary struct {
 	Enabled bool
 	// Backend is "filesystem" (default) or "rbd" (binary built with -tags rbd).
-	Backend                                                                             string
-	Root, Scope                                                                         string
-	RBDConf, RBDUser, RBDPool                                                           string
-	MaxUploadBytes                                                                      int64
-	MaxConcurrent                                                                       int
+	Backend                   string
+	Root, Scope               string
+	RBDConf, RBDUser, RBDPool string
+	MaxUploadBytes            int64
+	MaxConcurrent             int
+	// MaxDownloadStreams caps image bytes being sent at once; more downloads
+	// wait in line instead of being refused (0 = no cap beyond MaxConcurrent).
+	MaxDownloadStreams                                                                  int
 	UploadTimeout, DownloadTimeout, ResolutionTimeout, RecoveryTimeout, ShutdownTimeout time.Duration
 }
 
@@ -88,6 +92,22 @@ func loadBinary(c *Config, env func(string) string, mode string) error {
 			return errors.New("GLANCE_GO_MAX_CONCURRENT_TRANSFERS must be 1..64")
 		}
 		b.MaxConcurrent = n
+	}
+	// Official Glance serves downloads from its uwsgi workers (2 on the 4-vCPU
+	// lab VM) and leaves the rest queued. Go sent all 16 at once, and with 16
+	// clients of 64 MiB it lost throughput through Apache (12.9 vs 15.2 req/s);
+	// queued to 2 it reached 25.4 (evidence/sprint5/glance-resources-20261118).
+	// Measured on the filesystem store only: RBD reads wait on the network, so
+	// they keep no extra cap unless configured.
+	if b.Backend == "filesystem" {
+		b.MaxDownloadStreams = min(max(2, runtime.GOMAXPROCS(0)/2), b.MaxConcurrent)
+	}
+	if v := env("GLANCE_GO_MAX_DOWNLOAD_STREAMS"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 0 || n > b.MaxConcurrent {
+			return errors.New("GLANCE_GO_MAX_DOWNLOAD_STREAMS must be 0..GLANCE_GO_MAX_CONCURRENT_TRANSFERS")
+		}
+		b.MaxDownloadStreams = n
 	}
 	if mode == "serve" && b.Enabled && (c.DependencyTimeout >= b.UploadTimeout || c.DependencyTimeout >= b.DownloadTimeout) {
 		return errors.New("transfer timeouts must exceed dependency timeout")

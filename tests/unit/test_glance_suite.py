@@ -355,6 +355,62 @@ class SuiteGuardTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'bounded wait for Nova'):
                 suite.run(args)
 
+    def test_service_meter_reads_cgroup_cpu_and_pss_once_per_process(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            group = Path(tmp) / 'system.slice/devstack@g-api.service'
+            (group / 'child').mkdir(parents=True)
+            (group / 'cpu.stat').write_text('usage_usec 1075677\nuser_usec 910182\nsystem_usec 165495\n')
+            (group / 'cgroup.procs').write_text('939\n1072\n')
+            (group / 'child/cgroup.procs').write_text('1073\n1072\n')
+            calls = []
+
+            def run(args, **kw):
+                calls.append(args)
+                if args[0] == 'systemctl':
+                    return SimpleNamespace(stdout='/system.slice/devstack@g-api.service\n', returncode=0)
+                pid = int(args[-1].split('/')[2])
+                if pid == 1073:  # exited meanwhile
+                    return SimpleNamespace(stdout='', returncode=1)
+                return SimpleNamespace(stdout='Rss: 9000 kB\nPss:  %d kB\nPss_Anon: 1 kB\n' % (pid // 10), returncode=0)
+            meter = suite.ServiceMeter('devstack@g-api.service', run=run, root=Path(tmp))
+            self.assertEqual(meter.cpu_usec(), 1075677)
+            self.assertEqual(meter.pids(), [939, 1072, 1073])
+            self.assertEqual(meter.pss_kib(), 93 + 107)
+            self.assertEqual(sum(1 for c in calls if c[0] == 'sudo'), 3)
+            with self.assertRaisesRegex(AssertionError, 'cgroup'):
+                suite.ServiceMeter('x', run=lambda *a, **k: SimpleNamespace(stdout='/../etc\n', returncode=0), root=Path(tmp))
+        with self.assertRaises(ValueError):
+            suite.cpu_usage_usec('user_usec 1\n')
+
+    def test_resources_compare_reports_cpu_ratio_and_peak_memory(self):
+        original = {'resources': {'idle': {'pss_mib': 230.0, 'cpu_ms_per_s': 2.0},
+                                  'blocks': {'show': {'cpu_ms_per_req': 4.0, 'pss_max_mib': 233.0},
+                                             'download_64m': {'cpu_ms_per_req': 30.0, 'pss_max_mib': 240.0}}}}
+        go = {'resources': {'idle': {'pss_mib': 15.0, 'cpu_ms_per_s': 0.1},
+                            'blocks': {'show': {'cpu_ms_per_req': 0.5, 'pss_max_mib': 16.0},
+                                       'download_64m': {'cpu_ms_per_req': 45.0, 'pss_max_mib': 20.0},
+                                       'only_go': {'cpu_ms_per_req': 1.0, 'pss_max_mib': 1.0}}}}
+        rows = suite.resources_compare(original, go)
+        self.assertEqual(rows['show']['go_cpu_over_original'], 0.125)
+        self.assertEqual(rows['download_64m']['go_cpu_over_original'], 1.5)  # more CPU is reported, never hidden
+        self.assertNotIn('only_go', rows)
+        self.assertEqual(rows['idle']['go_pss_mib'], 15.0)
+        self.assertEqual(suite.resources_compare({}, go), {})
+
+    def test_backend_url_and_vm_cpu_ticks(self):
+        site = 'SetEnv proxy-sendchunked 1\nProxyPass "/image" "http://127.0.0.1:60999" retry=0 acquire=1 \n'
+        self.assertEqual(suite.backend_url(site), 'http://127.0.0.1:60999')
+        self.assertEqual(suite.backend_url(suite.glance_switch.replacement(19293).decode()), 'http://127.0.0.1:19293')
+        with self.assertRaises(AssertionError):
+            suite.backend_url('ProxyPass "/image" "http://10.0.0.5:60999"\n')
+        busy, total = suite.vm_cpu_ticks('cpu  100 5 50 800 40 3 2 0 9 0\ncpu0 1 2 3 4 5 6 7 8 9 0\n')
+        self.assertEqual((busy, total), (160, 1000))
+
+    def test_audit_covers_what_the_v3_campaign_measured(self):
+        for op in ('download_16m', 'download_16m_ttfb', 'download_1m_c16', 'download_16m_c16', 'download_64m_c16', 'upload_16m'):
+            self.assertIn(op, suite.AUDIT_OPS)
+        self.assertEqual([size[0] for size in suite.AUDIT_SIZES], ['1m', '16m', '64m'])
+
     def test_server_image_id_accepts_sdk_shapes(self):
         self.assertEqual(suite.server_image_id(SimpleNamespace(image={'id': IMAGE})), IMAGE)
         self.assertEqual(suite.server_image_id(SimpleNamespace(image=SimpleNamespace(id=IMAGE))), IMAGE)

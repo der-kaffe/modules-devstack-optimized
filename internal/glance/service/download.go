@@ -43,6 +43,31 @@ func (u *UploadCoordinator) claimDownload() (func(), error) {
 	return func() { u.mu.Lock(); u.readers--; u.notifyLocked(); u.mu.Unlock() }, nil
 }
 
+// waitStream takes one of the MaxDownloadStreams slots, waiting in line (Go's
+// channel wait queue is FIFO) like requests beyond official Glance's uwsgi
+// workers. Waiting holds no reader capacity, and only after the authorization
+// and visibility checks, so a 403/404 never waits. The client's context and
+// StopAdmission/Close end the wait. The slot is returned when the body closes.
+func (u *UploadCoordinator) waitStream(ctx context.Context) (func(), error) {
+	if u.streams == nil {
+		return func() {}, nil
+	}
+	select {
+	case u.streams <- struct{}{}:
+	case <-ctx.Done():
+		return nil, downloadError(ctx, ctx.Err())
+	case <-u.halt:
+		return nil, ErrUploadNotReady
+	}
+	select {
+	case <-u.halt: // admission stopped while this one was being granted
+		<-u.streams
+		return nil, ErrUploadNotReady
+	default:
+	}
+	return sync.OnceFunc(func() { <-u.streams }), nil
+}
+
 type downloadBody struct {
 	store.ReadSeekCloser
 	once    sync.Once
@@ -190,10 +215,16 @@ func (u *UploadCoordinator) OpenDownload(ctx context.Context, who auth.Identity,
 	} else if err = u.downloadImage(ctx, who, id); err != nil {
 		return nil, err
 	}
-	leave, err := u.claimDownload()
+	slot, err := u.waitStream(ctx)
 	if err != nil {
 		return nil, err
 	}
+	claimed, err := u.claimDownload()
+	if err != nil {
+		slot()
+		return nil, err
+	}
+	leave := func() { claimed(); slot() }
 	owned := false
 	defer func() {
 		if !owned {

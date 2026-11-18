@@ -27,10 +27,12 @@ var (
 const MaxServerUploadBytes int64 = 1 << 40
 
 type UploadLimits struct {
-	MaxBytes          int64
-	MaxConcurrent     int
-	ResolutionTimeout time.Duration
-	RecoveryTimeout   time.Duration
+	MaxBytes      int64
+	MaxConcurrent int
+	// MaxDownloadStreams > 0 queues downloads beyond it (see waitStream).
+	MaxDownloadStreams int
+	ResolutionTimeout  time.Duration
+	RecoveryTimeout    time.Duration
 }
 
 type ImageReader interface {
@@ -54,15 +56,22 @@ type UploadCoordinator struct {
 	deleting                  map[string]bool
 	readers                   int
 	release                   func()
+	streams                   chan struct{} // nil: downloads are not queued
+	halt                      chan struct{} // closed once admission stops
+	haltOnce                  sync.Once
 }
 
 // Unexported injection seam for tests with SQL/store doubles. Production obtains
 // exclusive store ownership through NewUploadCoordinator, not this seam.
 func newUploadCoordinator(images ImageReader, t repository.Transfers, s store.Store, limits UploadLimits) (*UploadCoordinator, error) {
-	if images == nil || t == nil || s == nil || limits.MaxBytes <= 0 || limits.MaxBytes > MaxServerUploadBytes || limits.MaxConcurrent < 1 || limits.MaxConcurrent > 64 || limits.ResolutionTimeout <= 0 || limits.ResolutionTimeout > time.Minute || limits.RecoveryTimeout <= 0 || limits.RecoveryTimeout > 10*time.Minute {
+	if images == nil || t == nil || s == nil || limits.MaxBytes <= 0 || limits.MaxBytes > MaxServerUploadBytes || limits.MaxConcurrent < 1 || limits.MaxConcurrent > 64 || limits.MaxDownloadStreams < 0 || limits.MaxDownloadStreams > limits.MaxConcurrent || limits.ResolutionTimeout <= 0 || limits.ResolutionTimeout > time.Minute || limits.RecoveryTimeout <= 0 || limits.RecoveryTimeout > 10*time.Minute {
 		return nil, errors.New("invalid upload dependencies or server limits")
 	}
-	return &UploadCoordinator{images: images, transfers: t, bytes: s, limits: limits, now: time.Now, active: map[string]bool{}, deleting: map[string]bool{}, changed: make(chan struct{})}, nil
+	u := &UploadCoordinator{images: images, transfers: t, bytes: s, limits: limits, now: time.Now, active: map[string]bool{}, deleting: map[string]bool{}, changed: make(chan struct{}), halt: make(chan struct{})}
+	if limits.MaxDownloadStreams > 0 {
+		u.streams = make(chan struct{}, limits.MaxDownloadStreams)
+	}
+	return u, nil
 }
 
 // Close refuses to relinquish ownership while a writer/recovery is still active.
@@ -79,6 +88,7 @@ func (u *UploadCoordinator) Close() error {
 	}
 	u.closed = true
 	u.ready = false
+	u.haltLocked()
 	u.notifyLocked()
 	if u.release != nil {
 		u.release()

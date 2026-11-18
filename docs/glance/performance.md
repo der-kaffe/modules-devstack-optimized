@@ -116,3 +116,29 @@ metadatos 1,57 → 1,18 ms y 1 099 → 1 254 req/s con 16 hilos. La auditoría c
 el oficial vuelve a dar ninguna operación más lenta (carga de 64 MiB en 0,31–0,35
 del oficial). La regresión con Nova pasa en los dos modos.
 [Evidencia](../../evidence/sprint5/glance-perf2-20261118/README.md).
+
+## Auditoría con CPU y memoria, y cola de descargas (2026-11-18)
+
+La auditoría ahora mide, además, lo que la campaña v3 midió y la primera
+auditoría no:
+- CPU por solicitud y PSS del servicio, desde su cgroup (sin MySQL, Keystone ni Apache);
+- carga y descarga de 16 MiB;
+- descargas con 16 clientes, por Apache y directo al servicio.
+
+Con eso apareció un caso donde Go era más lento: **64 MiB con 16 clientes**
+(12,9 frente a 15,2 req/s por Apache). Directo al servicio empataban, y quitar
+`sendfile` lo empeoraba. La causa era la concurrencia: el oficial atiende con 2
+workers uwsgi y deja el resto en cola, y Go enviaba las 16 a la vez en una VM de
+4 vCPU.
+
+**Cambio** (como el original): `GLANCE_GO_MAX_DOWNLOAD_STREAMS` deja en cola las
+descargas que pasan del límite, en vez de rechazarlas. En disco el límite es la
+mitad de las CPU con mínimo 2; en RBD no hay cola.
+
+**Resultado:**
+- 64 MiB con 16 clientes pasa a 25,5 req/s, frente a 14,5 del oficial (Go/oficial 0,55–0,58).
+- Go no es más lento en ninguna de las 22 operaciones.
+- Go gasta menos CPU en todos los bloques. En la descarga de 64 MiB, 7,5 frente a 91 ms; en la v3 Go gastaba 188–208 ms.
+- Go ocupa 13–17 MiB de PSS, frente a 233–325 MiB del oficial.
+
+[Evidencia](../../evidence/sprint5/glance-resources-20261118/README.md).

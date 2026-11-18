@@ -52,6 +52,7 @@ sin secretos [glance.env.example](../../configs/glance.env.example).
 | GLANCE_GO_STORE_SCOPE | UUID canónico no nulo; debe coincidir con SQL y marcador |
 | GLANCE_GO_MAX_UPLOAD_BYTES | 1073741824; 1..1099511627776, límite del stream real |
 | GLANCE_GO_MAX_CONCURRENT_TRANSFERS | 16 (antes 2); 1..64, compartido PUT/GET/DELETE, sin cola |
+| GLANCE_GO_MAX_DOWNLOAD_STREAMS | Descargas enviando bytes a la vez; las demás esperan en cola (no se rechazan). En disco, por defecto la mitad de las CPU con mínimo 2, como los workers uwsgi del oficial; en RBD, 0 (sin cola). De 0 a `MAX_CONCURRENT_TRANSFERS` |
 | GLANCE_GO_UPLOAD_TIMEOUT | 10m; >0 y <=1h, mayor que dependencia SQL/Keystone |
 | GLANCE_GO_DOWNLOAD_TIMEOUT | 10m; >0 y <=1h, incluye hashing previo y envío |
 | GLANCE_GO_RESOLUTION_TIMEOUT | 10s; >0 y <=1m, resolución/compensación detached acotada |
