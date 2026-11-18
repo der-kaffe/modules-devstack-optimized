@@ -16,7 +16,7 @@ func TestBinaryConfiguration(t *testing.T) {
 	}
 	e := base()
 	c, err := Load(func(k string) string { return e[k] }, "serve")
-	if err != nil || !c.Binary.Enabled || c.Binary.MaxUploadBytes != 1<<30 || c.Binary.MaxConcurrent != 2 || c.Binary.UploadTimeout != 10*time.Minute {
+	if err != nil || !c.Binary.Enabled || c.Binary.MaxUploadBytes != 1<<30 || c.Binary.MaxConcurrent != 16 || c.Binary.UploadTimeout != 10*time.Minute {
 		t.Fatal("binary defaults", err)
 	}
 	for key, values := range map[string][]string{

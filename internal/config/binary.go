@@ -25,7 +25,9 @@ type Binary struct {
 }
 
 func loadBinary(c *Config, env func(string) string, mode string) error {
-	b := Binary{MaxUploadBytes: 1 << 30, MaxConcurrent: 2, UploadTimeout: 10 * time.Minute, DownloadTimeout: 10 * time.Minute, ResolutionTimeout: 10 * time.Second, RecoveryTimeout: 5 * time.Minute, ShutdownTimeout: 30 * time.Second}
+	// 16 concurrent transfers (was 2): official Glance has no such cap beyond its
+	// workers; the campaigns ran with 16. Still bounded (1..64).
+	b := Binary{MaxUploadBytes: 1 << 30, MaxConcurrent: 16, UploadTimeout: 10 * time.Minute, DownloadTimeout: 10 * time.Minute, ResolutionTimeout: 10 * time.Second, RecoveryTimeout: 5 * time.Minute, ShutdownTimeout: 30 * time.Second}
 	if v := env("GLANCE_GO_BINARY_ENABLED"); v != "" {
 		if v != "true" && v != "false" {
 			return errors.New("GLANCE_GO_BINARY_ENABLED must be true or false")

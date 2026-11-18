@@ -7,6 +7,7 @@ import (
 	"io"
 	"mime"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -274,8 +275,16 @@ func (h *Handler) getFile(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, start+count-1, d.Size))
 	}
 	w.WriteHeader(status)
-	reader := &contextReader{ctx: r.Context(), src: io.LimitReader(d.Body, count)}
-	n, copyErr := io.CopyBuffer(w, reader, make([]byte, store.BufferSize))
+	var n int64
+	var copyErr error
+	if file, ok := d.Body.(interface{ File() *os.File }); ok && file.File() != nil {
+		// Zero-copy (sendfile) like a plain file server. timedHandler's
+		// connection deadlines bound and cancel it, instead of contextReader.
+		n, copyErr = io.Copy(w, io.LimitReader(file.File(), count))
+	} else {
+		reader := &contextReader{ctx: r.Context(), src: io.LimitReader(d.Body, count)}
+		n, copyErr = io.CopyBuffer(w, reader, make([]byte, store.BufferSize))
+	}
 	if copyErr != nil || n != count {
 		// Headers are committed: never append JSON or replace status. Abort the
 		// real HTTP stream (incl. HTTP/2) so a truncated payload cannot look whole.

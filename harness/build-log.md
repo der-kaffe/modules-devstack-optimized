@@ -1065,3 +1065,23 @@ Revalidación del 28/10/2026: se ejecutó `GOMAXPROCS=2 GOTOOLCHAIN=local make c
 - `make check` completo con race detector: OK. 98 tests Python unitarios: OK.
 - Límites: VM local de 6 GiB; prueba funcional, no de rendimiento. Ceph de
   prueba con `auth none` y memstore. Nova todavía no usa RBD (F3 y F4).
+
+
+### 2026-11-18 — Glance Go optimizado, alineado con Glance oficial
+
+- Referencia leída en la VM: keystonemiddleware (`token_cache_time` = 300,
+  clave SHA-256, sin cachear rechazos, expiración revisada en cada uso),
+  glance_store filesystem (GET sin hash, `add` en una pasada) y oslo.db (5 + 50).
+- Cambios: caché de tokens (sólo Glance), `OpenStream` sin hash y con
+  sendfile, `DataStateSnapshot` sin lock, pool de 55/16, Publish sin
+  relectura cuando el `.ready` no cambió, 16 transferencias por defecto y
+  cliente Keystone con 32 conexiones ociosas.
+  [Detalle](../docs/glance/performance.md).
+- Antes/después en la VM con Keystone real (`--quick-compare`, no es campaña):
+  metadatos p50 11,9 → 1,9 ms, 109 → 1 137 req/s con 16 hilos, descarga de
+  64 MiB 262 → 55 ms (primer byte 203 → 2,5 ms), carga de 64 MiB 685 → 508 ms.
+  Regresión B26: Glance Go 10/10 ×2 y Glance Go + Placement Go 14/14 ×2, con
+  limpieza completa.
+  [Evidencia](../evidence/sprint5/glance-performance-20261118/README.md).
+- `make glance-test-rbd` (incluye ahora 5 pruebas de integración MySQL): 9/9.
+  Los resultados v3 siguen correspondiendo a `d3286a6`.

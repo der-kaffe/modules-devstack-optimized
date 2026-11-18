@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -95,6 +96,33 @@ func TestMySQLTransferOperations(t *testing.T) {
 	state, err := r.DataState(ctx, image.ID)
 	if err != nil || state.Status != "active" || state.Operation == nil || state.Operation.Phase != model.DataCommitted || state.HashAlgorithm == nil || *state.HashAlgorithm != "sha512" {
 		t.Fatal(state, err)
+	}
+	// GET's non-locking read returns the same state and never waits for (or
+	// blocks) a writer holding the row lock; the locking read does wait.
+	snapshot, err := r.DataStateSnapshot(ctx, image.ID)
+	if err != nil || !reflect.DeepEqual(snapshot, state) {
+		t.Fatal("snapshot differs from locking read", snapshot, err)
+	}
+	writer, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var held string
+	if err = writer.QueryRowContext(ctx, "SELECT id FROM images WHERE id=? FOR UPDATE", image.ID).Scan(&held); err != nil {
+		t.Fatal(err)
+	}
+	readCtx, cancelRead := context.WithTimeout(ctx, 2*time.Second)
+	if _, err = r.DataStateSnapshot(readCtx, image.ID); err != nil {
+		t.Fatal("snapshot blocked by a row lock", err)
+	}
+	cancelRead()
+	lockedCtx, cancelLocked := context.WithTimeout(ctx, 500*time.Millisecond)
+	if _, err = r.DataState(lockedCtx, image.ID); err == nil {
+		t.Fatal("locking read did not wait for the writer")
+	}
+	cancelLocked()
+	if err = writer.Rollback(); err != nil {
+		t.Fatal(err)
 	}
 	got, err := r.Get(ctx, image.ID)
 	if err != nil || got.Properties["preserve"] != "yes" {

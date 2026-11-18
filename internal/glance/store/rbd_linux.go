@@ -88,6 +88,17 @@ type RBD struct {
 	closed bool
 	keysMu sync.Mutex
 	keys   map[string]*keyLock
+	staged map[string]rbdStaged // guarded by keysMu
+}
+
+// rbdStaged records what this instance's Stage measured. As official Glance's
+// rbd driver, Publish does not re-read data written by this process; it
+// re-reads only if the image id, size or receipt differ (or no record exists).
+// Changing an RBD image in between requires the cluster credentials.
+type rbdStaged struct {
+	id   string
+	size int64
+	info Info
 }
 
 // NewRBD opens an initialized pool with the expected scope and takes the
@@ -226,6 +237,12 @@ func (s *RBD) Stage(ctx context.Context, key Key, src io.Reader, limit int64, ex
 	if err == nil {
 		err = rbdError("flush staging", img.Flush())
 	}
+	stagedID := func() (string, bool) { return "", false }
+	if err == nil {
+		if id, idErr := img.GetId(); idErr == nil {
+			stagedID = func() (string, bool) { return id, true }
+		}
+	}
 	// On failure the .part stays for explicit Delete/recovery, as on disk.
 	if closeErr := rbdError("close staging", img.Close()); err == nil {
 		err = closeErr
@@ -235,6 +252,14 @@ func (s *RBD) Stage(ctx context.Context, key Key, src io.Reader, limit int64, ex
 	}
 	if err = rbd.GetImage(s.ioctx, name+".part").Rename(name + ".ready"); err != nil {
 		return Info{}, rbdError("mark ready", err)
+	}
+	if id, ok := stagedID(); ok {
+		s.keysMu.Lock()
+		if s.staged == nil {
+			s.staged = map[string]rbdStaged{}
+		}
+		s.staged[name] = rbdStaged{id: id, size: info.Size, info: info}
+		s.keysMu.Unlock()
 	}
 	return info, nil
 }
@@ -256,13 +281,26 @@ func (s *RBD) Publish(ctx context.Context, key Key, expected Info) error {
 		return rbdError("open ready", err)
 	}
 	size := expected.Size
-	var info Info
-	reader, err := newRBDReader(img)
-	if err == nil {
-		info, err = measure(ctx, reader, nil, size, &size)
+	s.keysMu.Lock()
+	want, recorded := s.staged[name]
+	delete(s.staged, name)
+	s.keysMu.Unlock()
+	unchanged := false
+	if recorded && want.info == expected {
+		id, idErr := img.GetId()
+		raw, sizeErr := img.GetSize()
+		unchanged = idErr == nil && sizeErr == nil && id == want.id && int64(raw) == want.size
 	}
-	if err == nil && info != expected {
-		err = ErrIntegrity
+	if !unchanged {
+		var info Info
+		reader, rerr := newRBDReader(img)
+		err = rerr
+		if err == nil {
+			info, err = measure(ctx, reader, nil, size, &size)
+		}
+		if err == nil && info != expected {
+			err = ErrIntegrity
+		}
 	}
 	if err == nil {
 		// Snapshot before the name becomes final: a published .blob always has
@@ -370,6 +408,28 @@ func (s *RBD) Open(ctx context.Context, key Key) (ReadSeekCloser, Info, error) {
 	return reader, info, nil
 }
 
+// OpenStream opens .blob@snap for serving without measuring it.
+func (s *RBD) OpenStream(ctx context.Context, key Key) (ReadSeekCloser, int64, error) {
+	name, leave, err := s.enter(ctx, key)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer leave()
+	img, err := rbd.OpenImageReadOnly(s.ioctx, name+".blob", rbdSnapshot)
+	if errors.Is(err, rbd.ErrNotFound) {
+		return nil, 0, ErrNotFound
+	}
+	if err != nil {
+		return nil, 0, rbdError("open content", err)
+	}
+	reader, err := newRBDReader(img)
+	if err != nil {
+		_ = img.Close()
+		return nil, 0, err
+	}
+	return reader, reader.size, nil
+}
+
 // Delete removes only this key's names. Protected snapshots with clones
 // (images Nova is using) make it fail with ErrInUse and keep the content.
 func (s *RBD) Delete(ctx context.Context, key Key) error {
@@ -378,6 +438,9 @@ func (s *RBD) Delete(ctx context.Context, key Key) error {
 		return err
 	}
 	defer leave()
+	s.keysMu.Lock()
+	delete(s.staged, name)
+	s.keysMu.Unlock()
 	for _, suffix := range []string{".part", ".ready", ".blob"} {
 		if err := s.remove(name + suffix); err != nil {
 			return err

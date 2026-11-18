@@ -186,6 +186,30 @@ func (w *responseLog) WriteHeader(status int) {
 	}
 	w.ResponseWriter.WriteHeader(status)
 }
+
+// ReadFrom keeps net/http's zero-copy path (sendfile) through the logging
+// wrapper; io.Copy only uses it when the writer itself implements ReaderFrom.
+func (w *responseLog) ReadFrom(src io.Reader) (int64, error) {
+	if w.status == 0 {
+		w.WriteHeader(http.StatusOK)
+	}
+	var n int64
+	var err error
+	if rf, ok := w.ResponseWriter.(io.ReaderFrom); ok {
+		n, err = rf.ReadFrom(src)
+	} else {
+		n, err = io.Copy(writerOnly{w.ResponseWriter}, src)
+	}
+	w.bytes += n
+	if err != nil {
+		w.kind = "response_write"
+	}
+	return n, err
+}
+
+// writerOnly hides ReadFrom to avoid recursion in the fallback copy.
+type writerOnly struct{ io.Writer }
+
 func (w *responseLog) Write(data []byte) (int, error) {
 	if w.status == 0 {
 		w.WriteHeader(http.StatusOK)

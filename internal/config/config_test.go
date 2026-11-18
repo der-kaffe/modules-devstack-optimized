@@ -133,3 +133,24 @@ func TestPlacementNamespaceIsIndependent(t *testing.T) {
 		t.Fatal("Glance secret used for Placement")
 	}
 }
+
+// keystonemiddleware's token_cache_time: 300 s by default, -1 disables.
+func TestGlanceTokenCacheTime(t *testing.T) {
+	e := environment(t)
+	c, err := Load(func(k string) string { return e[k] }, "serve")
+	if err != nil || c.TokenCacheTime != 300*time.Second {
+		t.Fatal("default token cache time", c.TokenCacheTime, err)
+	}
+	for value, want := range map[string]time.Duration{"-1": 0, "1": time.Second, "600": 10 * time.Minute} {
+		e["GLANCE_GO_TOKEN_CACHE_TIME"] = value
+		if c, err = Load(func(k string) string { return e[k] }, "serve"); err != nil || c.TokenCacheTime != want {
+			t.Fatal(value, c.TokenCacheTime, err)
+		}
+	}
+	for _, bad := range []string{"0", "-2", "86401", "5m", "x"} {
+		e["GLANCE_GO_TOKEN_CACHE_TIME"] = bad
+		if _, err = Load(func(k string) string { return e[k] }, "serve"); err == nil {
+			t.Fatal("accepted", bad)
+		}
+	}
+}

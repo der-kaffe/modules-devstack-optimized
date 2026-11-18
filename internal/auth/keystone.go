@@ -15,7 +15,9 @@ import (
 )
 
 // Keystone uses a non-admin application credential with the service role.
-// Only its own service token is cached. User tokens are validated on every call.
+// Its own service token is always cached. Incoming tokens are validated on
+// every call unless WithTokenCache is given (Glance does, like official Glance's
+// keystonemiddleware; Placement does not).
 type Keystone struct {
 	url        string
 	client     *http.Client
@@ -23,6 +25,20 @@ type Keystone struct {
 	mu         sync.Mutex
 	token      validatorToken
 	refresh    *tokenRefresh
+	cache      *tokenCache
+}
+
+// KeystoneOption configures optional validator behavior.
+type KeystoneOption func(*Keystone)
+
+// WithTokenCache reuses successful validations of incoming tokens for ttl, as
+// keystonemiddleware's token_cache_time does. ttl <= 0 keeps validating always.
+func WithTokenCache(ttl time.Duration, maxEntries int) KeystoneOption {
+	return func(k *Keystone) {
+		if ttl > 0 && maxEntries > 0 {
+			k.cache = newTokenCache(ttl, maxEntries)
+		}
+	}
 }
 
 type tokenRefresh struct {
@@ -37,10 +53,14 @@ type validatorToken struct {
 	expires          time.Time
 }
 
-func NewKeystone(url string, client *http.Client, credential config.ServiceCredential) *Keystone {
+func NewKeystone(url string, client *http.Client, credential config.ServiceCredential, options ...KeystoneOption) *Keystone {
 	copyClient := *client
 	copyClient.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	return &Keystone{url: strings.TrimRight(url, "/") + "/auth/tokens", client: &copyClient, credential: credential}
+	k := &Keystone{url: strings.TrimRight(url, "/") + "/auth/tokens", client: &copyClient, credential: credential}
+	for _, option := range options {
+		option(k)
+	}
+	return k
 }
 
 type tokenResponse struct {
@@ -233,6 +253,21 @@ func (k *Keystone) validate(ctx context.Context, token string, allowExpired bool
 	if !validHeaderToken(token) {
 		return Identity{}, "", ErrInvalidToken
 	}
+	if k.cache != nil {
+		if identity, ok := k.cache.get(token); ok {
+			// The validator project still comes from the current own token.
+			serviceToken, err := k.serviceToken(ctx)
+			if err != nil {
+				return Identity{}, "", err
+			}
+			if !allowExpired {
+				if err := identity.Check(time.Now()); err != nil {
+					return Identity{}, "", err
+				}
+			}
+			return identity, serviceToken.projectID, nil
+		}
+	}
 	for attempt := 0; attempt < 2; attempt++ {
 		serviceToken, err := k.serviceToken(ctx)
 		if err != nil {
@@ -270,6 +305,9 @@ func (k *Keystone) validate(ctx context.Context, token string, allowExpired bool
 		response.Body.Close()
 		if ctx.Err() != nil {
 			return Identity{}, "", errors.Join(ErrUnavailable, ctx.Err())
+		}
+		if err == nil && k.cache != nil {
+			k.cache.put(token, identity) // like TokenCache.set after verify_token
 		}
 		if err == nil && !allowExpired {
 			err = identity.Check(time.Now())

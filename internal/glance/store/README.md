@@ -82,8 +82,11 @@ en este paquete; ambas responsabilidades quedan en el servicio/repositorio.
 
 ## Apertura, integridad y eliminación
 
-`Open` abre únicamente `.blob`, verifica inode y longitud, calcula hashes mediante
-streaming y devuelve un descriptor seekable en offset cero. El llamador es dueño
+`OpenStream` (descargas) abre `.blob`, verifica el inodo y devuelve el descriptor y
+su longitud **sin hashear**, como glance_store; el servicio compara la longitud con
+SQL. `Open` (recuperación y borrado) abre únicamente `.blob`, verifica inode y
+longitud, calcula hashes mediante streaming y devuelve un descriptor seekable en
+offset cero. El llamador es dueño
 del descriptor: debe cerrarlo. Delete/Close no invalidan un descriptor ya devuelto.
 Open mide la integridad actual; solo compararla con el Info autoritativo esperado
 permite detectar corrupción de igual longitud. No hay metadatos SQL ni manifest

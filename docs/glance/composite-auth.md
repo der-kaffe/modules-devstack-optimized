@@ -44,7 +44,11 @@ no vacíos, sin controles, espacios ni listas separadas por comas.
 4. Se valida el usuario mediante una nueva petición con
    ?nocatalog&allow_expired=true. Un 404, incluso por revocación o por superar
    la ventana del servidor, rechaza la solicitud. Un fallo del validador falla
-   cerrado. No hay caché de tokens entrantes ni fallback a una identidad anterior.
+   cerrado. No hay fallback a una identidad anterior. Desde 2026-11-18, Glance Go
+   reutiliza durante `GLANCE_GO_TOKEN_CACHE_TIME` (300 s) cada token validado con
+   éxito, como keystonemiddleware: clave SHA-256, sin cachear rechazos y con la
+   expiración revisada en cada uso. Igual que en el original, un token revocado
+   puede servir hasta ese tiempo; `-1` desactiva la caché.
 5. Se entrega únicamente la identidad del usuario, con su proyecto, roles y
    expires_at originales. Un campo privado permite representar la validación
    compuesta que Keystone acaba de confirmar; no puede construirse por JSON.

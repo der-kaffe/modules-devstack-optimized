@@ -8,7 +8,10 @@
 #   2. the RBD store tests against the real cluster;
 #   3. the B25 end-to-end test (HTTP + coordinator + MySQL + store) with the
 #      filesystem store, as reference;
-#   4. the same end-to-end test with the RBD store, and checks the pool is empty.
+#   4. the same end-to-end test with the RBD store, and checks the pool is empty;
+#   5. the MySQL repository integration tests (transfers incl. non-locking GET
+#      reads, catalog, coordinated deletion, B25 fences and upgrade), each on a
+#      NEW EMPTY schema.
 # Containers are always removed at the end, also on failure.
 #
 # Usage: infra/ceph-micro/run-tests.sh <NEW output directory>
@@ -60,7 +63,14 @@ for _ in $(seq 1 90); do
 done
 ((ready)) || { echo 'MySQL no respondió.' >&2; exit 1; }
 
-for name in fs rbd; do
+sql_tests=(transfers:TestMySQLTransferOperations:GLANCE_GO_MYSQL_TEST
+           catalog:TestMySQLCatalogOperations:GLANCE_GO_MYSQL_TEST
+           deletion:TestMySQLCoordinatedDeletion:GLANCE_GO_MYSQL_TEST
+           fences:TestB25MySQLConcurrentFences:GLANCE_GO_B25_MYSQL_TEST
+           upgrade:TestB25MySQLVersionedUpgrade:GLANCE_GO_B25_MYSQL_TEST)
+schemas=(fs rbd)
+for entry in "${sql_tests[@]}"; do schemas+=("${entry%%:*}"); done
+for name in "${schemas[@]}"; do
   schema=glance_go_test_${name}_e2e
   escaped=${schema//_/\\_}
   mig=$(head -c 18 /dev/urandom | base64 | tr -dc 'A-Za-z0-9')
@@ -104,10 +114,21 @@ step e2e-rbd -e GLANCE_GO_B25_MYSQL_TEST=1 -e GLANCE_GO_TEST_DSN_FILE=/tmp/dsn/r
 images=$(docker exec "$ceph" rbd -p glance-go-e2e ls | wc -l)
 docker stats --no-stream --format '{{.Name}} {{.MemUsage}}' "$ceph" "$db" > "$out/memory.txt"
 
+for entry in "${sql_tests[@]}"; do
+  IFS=: read -r name test flag <<< "$entry"
+  step "sql-$name" -e "$flag=1" -e "GLANCE_GO_TEST_DSN_FILE=/tmp/dsn/$name-mig.dsn" "$ceph" \
+    go test -p 1 -count=1 -tags integration -run "^$test\$" -v ./internal/glance/repository/mysql/
+done
+
 passed=true
-for name in vet store-rbd e2e-filesystem e2e-rbd; do [[ ${result[$name]} == pass ]] || passed=false; done
+steps=(vet store-rbd e2e-filesystem e2e-rbd)
+for entry in "${sql_tests[@]}"; do steps+=("sql-${entry%%:*}"); done
+json=''
+for name in "${steps[@]}"; do
+  [[ ${result[$name]} == pass ]] || passed=false
+  json+="\"$name\": \"${result[$name]}\", "
+done
 [[ $images == 0 ]] || passed=false
-printf '{"passed": %s, "vet": "%s", "store_rbd": "%s", "e2e_filesystem": "%s", "e2e_rbd": "%s", "rbd_images_left": %s}\n' \
-  "$passed" "${result[vet]}" "${result[store-rbd]}" "${result[e2e-filesystem]}" "${result[e2e-rbd]}" "$images" > "$out/summary.json"
+printf '{"passed": %s, %s"rbd_images_left": %s}\n' "$passed" "$json" "$images" > "$out/summary.json"
 cat "$out/summary.json"
 [[ $passed == true ]]

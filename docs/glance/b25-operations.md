@@ -51,7 +51,7 @@ sin secretos [glance.env.example](../../configs/glance.env.example).
 | GLANCE_GO_STORE_ROOT | Obligatorio con B25; ruta absoluta limpia, existente, privada 0700 |
 | GLANCE_GO_STORE_SCOPE | UUID canónico no nulo; debe coincidir con SQL y marcador |
 | GLANCE_GO_MAX_UPLOAD_BYTES | 1073741824; 1..1099511627776, límite del stream real |
-| GLANCE_GO_MAX_CONCURRENT_TRANSFERS | 2; 1..64, compartido PUT/GET/DELETE, sin cola |
+| GLANCE_GO_MAX_CONCURRENT_TRANSFERS | 16 (antes 2); 1..64, compartido PUT/GET/DELETE, sin cola |
 | GLANCE_GO_UPLOAD_TIMEOUT | 10m; >0 y <=1h, mayor que dependencia SQL/Keystone |
 | GLANCE_GO_DOWNLOAD_TIMEOUT | 10m; >0 y <=1h, incluye hashing previo y envío |
 | GLANCE_GO_RESOLUTION_TIMEOUT | 10s; >0 y <=1m, resolución/compensación detached acotada |
@@ -228,7 +228,8 @@ startup vacío, startup/recovery con objetos incompletos y committed.
 Medir desde cliente latencia p50/p95/p99, errores y throughput de bytes verificados;
 muestrear `/proc/<pid>/status`, CPU de `/proc/<pid>/stat`, RAM/RSS y `/usr/bin/time -v`
 en procesos propios autorizados. Contabilizar por separado MySQL y filesystem.
-GET hace una pasada completa de hashes ANTES de transmitir (también rangos) y
-recovery puede recorrer blobs grandes. Incluir esos costes, no quitarlos para
+Hasta la revisión medida en la v3, GET hacía una pasada completa de hashes ANTES
+de transmitir. Desde 2026-11-18 sirve sin rehash, como glance_store (ver
+[performance.md](performance.md)). Recovery puede recorrer blobs grandes. Incluir esos costes, no quitarlos para
 favorecer Go. El buffer fijo no equivale a una medición de RSS o throughput.
 No hay benchmark ni resultados empíricos inventados en esta acción.

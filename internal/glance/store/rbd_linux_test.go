@@ -92,6 +92,15 @@ func TestRBDRoundTripUnknownLength(t *testing.T) {
 		t.Fatal(err)
 	}
 	_ = r.Close()
+	stream, size, err := s.OpenStream(ctx, key)
+	if err != nil || size != want.Size {
+		t.Fatalf("open stream %v %d", err, size)
+	}
+	streamed, err := io.ReadAll(stream)
+	_ = stream.Close()
+	if err != nil || !bytes.Equal(streamed, data) {
+		t.Fatal("unhashed stream differs")
+	}
 	if err = s.Publish(ctx, key, got); !errors.Is(err, ErrExists) {
 		t.Fatalf("republish must not replace: %v", err)
 	}

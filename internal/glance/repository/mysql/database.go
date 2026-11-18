@@ -87,8 +87,10 @@ func Open(dsn string) (*sql.DB, error) {
 		return nil, errors.New("invalid MySQL connector configuration")
 	}
 	db := sql.OpenDB(connector)
-	db.SetMaxOpenConns(4)
-	db.SetMaxIdleConns(2)
+	// Official Glance uses oslo.db's SQLAlchemy pool: 5 kept + 50 overflow.
+	// Same ceiling; more kept idle so bursts do not reconnect (was 4 / 2).
+	db.SetMaxOpenConns(55)
+	db.SetMaxIdleConns(16)
 	db.SetConnMaxLifetime(3 * time.Minute)
 	return db, nil
 }

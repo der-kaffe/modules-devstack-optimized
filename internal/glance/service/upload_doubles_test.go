@@ -131,6 +131,9 @@ func (c uploadCatalogDouble) Get(ctx context.Context, id string) (model.Image, e
 	}
 	return c.sql.image, nil
 }
+func (d *uploadSQLDouble) DataStateSnapshot(ctx context.Context, id string) (model.DataState, error) {
+	return d.DataState(ctx, id) // same "State" event: tests observe reads, not locks
+}
 func (d *uploadSQLDouble) DataState(ctx context.Context, id string) (out model.DataState, err error) {
 	err = d.run(ctx, "State", func() error {
 		d.reads++
@@ -376,6 +379,22 @@ func (s *uploadStoreDouble) Open(ctx context.Context, k store.Key) (store.ReadSe
 	}
 	b := append([]byte{}, s.blob...)
 	return uploadReadCloser{bytes.NewReader(b), s.log}, uploadInfo(b), nil
+}
+func (s *uploadStoreDouble) OpenStream(ctx context.Context, k store.Key) (store.ReadSeekCloser, int64, error) {
+	s.event("OpenStream", k)
+	if ctx.Err() != nil {
+		return nil, 0, ctx.Err()
+	}
+	if f := s.faults["OpenStream"]; f.err != nil {
+		return nil, 0, f.err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.blob == nil {
+		return nil, 0, store.ErrNotFound
+	}
+	b := append([]byte{}, s.blob...)
+	return uploadReadCloser{bytes.NewReader(b), s.log}, int64(len(b)), nil
 }
 func (s *uploadStoreDouble) Delete(ctx context.Context, k store.Key) error {
 	s.event("Delete", k)

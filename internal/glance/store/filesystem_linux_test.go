@@ -614,3 +614,116 @@ func TestLinuxPublicationIsAtomicAndUsesPinnedInode(t *testing.T) {
 		t.Fatal("source pathname re-resolved", err)
 	}
 }
+
+// Downloads use OpenStream (as glance_store: no re-hash); recovery and deletion
+// keep Open, which still detects same-size corruption.
+func TestFilesystemOpenStreamServesWithoutHashing(t *testing.T) {
+	s, root, _ := fixture(t)
+	k := key()
+	b := bytes.Repeat([]byte("stream-\x00\xff"), BufferSize/2+3)
+	expected := int64(len(b))
+	i, err := s.Stage(context.Background(), k, bytes.NewReader(b), expected, &expected)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = s.Publish(context.Background(), k, i); err != nil {
+		t.Fatal(err)
+	}
+	f, size, err := s.OpenStream(context.Background(), k)
+	if err != nil || size != expected {
+		t.Fatal(size, err)
+	}
+	if _, isFile := f.(*os.File); !isFile {
+		t.Fatal("filesystem stream must be an *os.File (sendfile)")
+	}
+	data, err := io.ReadAll(f)
+	_ = f.Close()
+	if err != nil || !bytes.Equal(data, b) {
+		t.Fatal("streamed content differs", err)
+	}
+	name, _ := k.name()
+	blob, err := os.OpenFile(root+"/objects/"+name+".blob", os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = blob.WriteAt([]byte("X"), 5); err != nil { // same size, different bytes
+		t.Fatal(err)
+	}
+	_ = blob.Close()
+	if f, size, err = s.OpenStream(context.Background(), k); err != nil || size != expected {
+		t.Fatal("stream must not hash", err)
+	}
+	_ = f.Close()
+	// Open still measures: its fresh hashes no longer match the receipt, which
+	// recovery and deletion compare (store returns facts, callers decide).
+	verified, measured, err := s.Open(context.Background(), k)
+	if err != nil || measured == i || measured.Size != i.Size {
+		t.Fatal("verifying Open must expose the corruption", measured, err)
+	}
+	_ = verified.Close()
+	if _, _, err = s.OpenStream(context.Background(), key()); !errors.Is(err, ErrNotFound) {
+		t.Fatal(err)
+	}
+	if _, _, err = s.OpenStream(context.Background(), Key{ImageID: "x", AttemptID: "y"}); !errors.Is(err, ErrInvalidKey) {
+		t.Fatal(err)
+	}
+}
+
+// Publish skips its re-read only for the exact file Stage measured (official
+// Glance hashes once while writing). In-place same-size edits change ctime.
+func TestFilesystemPublishSkipsRereadOnlyForUnchangedStage(t *testing.T) {
+	s, root, _ := fixture(t)
+	k := key()
+	i, err := s.Stage(context.Background(), k, strings.NewReader("measured-bytes"), 100, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	name, _ := k.name()
+	ready, err := os.Open(pathFor(root, "staging", k, ".ready"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ready.Close()
+	if !s.unchangedSinceStage(name, ready, i) {
+		t.Fatal("fresh stage must use the fast path")
+	}
+	if s.unchangedSinceStage(name, ready, i) {
+		t.Fatal("record must be consumed by the first attempt")
+	}
+	k2 := key()
+	i2, err := s.Stage(context.Background(), k2, strings.NewReader("measured-bytes"), 100, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	name2, _ := k2.name()
+	other := i2
+	other.Checksum = strings.Repeat("0", 32)
+	f2, err := os.Open(pathFor(root, "staging", k2, ".ready"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f2.Close()
+	if s.unchangedSinceStage(name2, f2, other) {
+		t.Fatal("a different receipt must verify fully")
+	}
+	k3 := key()
+	i3, err := s.Stage(context.Background(), k3, strings.NewReader("measured-bytes"), 100, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w, err := os.OpenFile(pathFor(root, "staging", k3, ".ready"), os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(10 * time.Millisecond)                   // ctime granularity
+	if _, err = w.WriteAt([]byte("X"), 0); err != nil { // same size
+		t.Fatal(err)
+	}
+	_ = w.Close()
+	if err = s.Publish(context.Background(), k3, i3); !errors.Is(err, ErrIntegrity) {
+		t.Fatal("in-place same-size edit after Stage must be rejected", err)
+	}
+	if err = s.Publish(context.Background(), k2, i2); err != nil {
+		t.Fatal("untouched stage must publish", err)
+	}
+}

@@ -41,7 +41,7 @@ func (v *validationTrace) snapshot() []validationCall {
 // This independent protocol fixture models the inspected Keystone expiry and
 // revocation contract. 48h is the observed server policy, NOT a Go auth default.
 // These tests do not issue, revoke or validate tokens on the real laboratory.
-func compositeValidator(t *testing.T, tokens map[string]compositeToken) (*Keystone, *validationTrace) {
+func compositeValidator(t testing.TB, tokens map[string]compositeToken) (*Keystone, *validationTrace) {
 	t.Helper()
 	trace := &validationTrace{}
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

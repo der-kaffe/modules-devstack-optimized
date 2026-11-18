@@ -315,8 +315,10 @@ X-Subject-Token al usuario. Requiere una credencial de servicio con permiso de
 validación de tokens, rol service y sin admin. No crea esa credencial ni modifica
 políticas. La disponibilidad y permisos de tal identidad real quedan por verificar.
 
-Solo el token propio se guarda en memoria hasta su renovación; los tokens usuario
-se validan en cada petición. La renovación comparte únicamente el resultado del
+El token propio se guarda en memoria hasta su renovación. Desde 2026-11-18 los
+tokens entrantes validados con éxito también se reutilizan durante
+`GLANCE_GO_TOKEN_CACHE_TIME` (300 s por defecto), igual que keystonemiddleware en
+Glance oficial ([performance.md](performance.md)). Placement Go no usa esta caché. La renovación comparte únicamente el resultado del
 token de servicio mediante un canal de finalización; no mantiene un mutex durante
 HTTP ni crea goroutines propias. Cada solicitud en espera puede cancelar su contexto.
 Si quien renueva falla o vence, quienes esperaban reciben ese fallo; una petición

@@ -26,6 +26,9 @@ type Config struct {
 	RequestTimeout, DependencyTimeout                  time.Duration
 	MaxBodyBytes                                       int64
 	Binary                                             Binary
+	// TokenCacheTime mirrors keystonemiddleware's token_cache_time (Glance only;
+	// 0 = validate every request). Default 300s, as in official Glance.
+	TokenCacheTime time.Duration
 }
 
 // ReadSecret rejects group/world-readable files and never returns their contents in errors.
@@ -146,6 +149,14 @@ func load(getenv func(string) string, mode, prefix, defaultAddress string) (Conf
 	if prefix == "GLANCE_GO_" {
 		if err := loadBinary(&c, getenv, mode); err != nil {
 			return Config{}, err
+		}
+		c.TokenCacheTime = 300 * time.Second
+		if value := getenv("GLANCE_GO_TOKEN_CACHE_TIME"); value != "" {
+			n, err := strconv.Atoi(value)
+			if err != nil || n == 0 || n < -1 || n > 86400 {
+				return Config{}, errors.New("GLANCE_GO_TOKEN_CACHE_TIME must be -1 (disabled) or 1..86400 seconds")
+			}
+			c.TokenCacheTime = time.Duration(max(n, 0)) * time.Second
 		}
 	}
 	if mode != "serve" {

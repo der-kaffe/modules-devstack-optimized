@@ -1,0 +1,457 @@
+{
+  "schema": 1,
+  "suite": "glance-b26",
+  "run_id": "tt-glance-b26-346512f31f68",
+  "started_utc": "2026-11-18T06:40:08.819916+00:00",
+  "cases": {
+    "preflight_and_isolation": {
+      "passed": true,
+      "seconds": 11.9,
+      "original_images": 1
+    },
+    "auth_fail_closed": {
+      "passed": true,
+      "seconds": 0.0,
+      "go_missing_token": 401,
+      "go_invalid_token": 401,
+      "python_missing_token": 401,
+      "go_discovery": 300,
+      "python_discovery": 300
+    },
+    "not_found": {
+      "passed": true,
+      "seconds": 0.0
+    },
+    "catalog_and_bytes_direct": {
+      "passed": true,
+      "seconds": 0.1,
+      "sizes_mib": [
+        1
+      ]
+    },
+    "quick_compare": {
+      "passed": true,
+      "seconds": 5.2,
+      "metadata_seq_ms": {
+        "p50": 1.87,
+        "p95": 2.25
+      },
+      "metadata_c16_ms": {
+        "p50": 10.37,
+        "p95": 21.17
+      },
+      "metadata_c16_rps": 1136.9,
+      "download_64m_total_ms": {
+        "p50": 55.33,
+        "p95": 57.85
+      },
+      "download_64m_ttfb_ms": {
+        "p50": 2.46,
+        "p95": 3.93
+      },
+      "upload_64m_ms": {
+        "p50": 507.9,
+        "p95": 717.0
+      }
+    },
+    "route_go_public": {
+      "passed": true,
+      "seconds": 1.2,
+      "lease_seconds": 900
+    },
+    "catalog_and_bytes_public": {
+      "passed": true,
+      "seconds": 0.1
+    },
+    "image_for_nova": {
+      "passed": true,
+      "seconds": 0.3,
+      "image_size": 21692416,
+      "source": "cirros-0.6.3-x86_64-disk.img"
+    },
+    "nova_boot_from_go": {
+      "passed": true,
+      "seconds": 8.1,
+      "seconds_to_active": 4.3,
+      "states": [
+        "BUILD",
+        "ACTIVE"
+      ]
+    },
+    "nova_glance_flow": {
+      "passed": true,
+      "seconds": 0.1,
+      "nova_calls": 6,
+      "request_id_correlated": 0,
+      "attributed_by_apache": 6,
+      "callers": [
+        "nova"
+      ],
+      "metadata_reads_200": 3,
+      "downloads_200_full": 1,
+      "composite_auth_seen": null,
+      "non_nova_glance_requests": 0
+    },
+    "server_and_image_removed": {
+      "passed": true,
+      "seconds": 2.5
+    }
+  },
+  "cleanup": {
+    "original_unchanged": true,
+    "private_root_removed": true,
+    "runtime_removed": true,
+    "identity_removed": true,
+    "controls_restored": true,
+    "original_services_active": {
+      "devstack@placement-api.service": true,
+      "devstack@g-api.service": true,
+      "devstack@n-cpu.service": true,
+      "devstack@n-sch.service": true,
+      "devstack@keystone.service": true
+    },
+    "pending_images": 0,
+    "server_removed": true,
+    "service_validator_removed": true
+  },
+  "execution_error": null,
+  "passed": true,
+  "mode": "glance-go",
+  "required_cases": [
+    "preflight_and_isolation",
+    "auth_fail_closed",
+    "not_found",
+    "catalog_and_bytes_direct",
+    "quick_compare",
+    "route_go_public",
+    "catalog_and_bytes_public",
+    "image_for_nova",
+    "nova_boot_from_go",
+    "nova_glance_flow",
+    "server_and_image_removed"
+  ],
+  "service_validator": {
+    "name": "tt-placement-glance-5cc608d03072",
+    "project": "service",
+    "roles": [
+      "service"
+    ]
+  },
+  "boot_states": [
+    {
+      "t_s": 0.1,
+      "status": "BUILD"
+    },
+    {
+      "t_s": 4.3,
+      "status": "ACTIVE"
+    }
+  ],
+  "request_cases": [
+    {
+      "method": "GET",
+      "path": "/v2/images?limit=1000",
+      "status": 200,
+      "expected": 200,
+      "bytes": 1056,
+      "error_kind": null
+    },
+    {
+      "method": "GET",
+      "path": "/v2/images/e3b0eb1b-be1b-4a29-9894-ee015dc6e367",
+      "status": 404,
+      "expected": 404,
+      "bytes": 155,
+      "error_kind": null
+    },
+    {
+      "method": "GET",
+      "path": "/v2/images/77eb9c52-cad6-465b-b40c-27bec927c853",
+      "status": 404,
+      "expected": 404,
+      "bytes": 155,
+      "error_kind": null
+    },
+    {
+      "method": "POST",
+      "path": "/v2/images",
+      "status": 201,
+      "expected": 201,
+      "bytes": 652,
+      "error_kind": null
+    },
+    {
+      "method": "PUT",
+      "path": "/v2/images/77eb9c52-cad6-465b-b40c-27bec927c853/file",
+      "status": 204,
+      "expected": 204,
+      "bytes": 0,
+      "error_kind": null
+    },
+    {
+      "method": "GET",
+      "path": "/v2/images/77eb9c52-cad6-465b-b40c-27bec927c853",
+      "status": 200,
+      "expected": 200,
+      "bytes": 818,
+      "error_kind": null
+    },
+    {
+      "method": "GET",
+      "path": "/v2/images/77eb9c52-cad6-465b-b40c-27bec927c853/file",
+      "status": 200,
+      "expected": 200,
+      "bytes": 1048576,
+      "error_kind": null
+    },
+    {
+      "method": "PATCH",
+      "path": "/v2/images/77eb9c52-cad6-465b-b40c-27bec927c853",
+      "status": 200,
+      "expected": 200,
+      "bytes": 826,
+      "error_kind": null
+    },
+    {
+      "method": "DELETE",
+      "path": "/v2/images/77eb9c52-cad6-465b-b40c-27bec927c853",
+      "status": 204,
+      "expected": 204,
+      "bytes": 0,
+      "error_kind": null
+    },
+    {
+      "method": "GET",
+      "path": "/v2/images/77eb9c52-cad6-465b-b40c-27bec927c853",
+      "status": 404,
+      "expected": 404,
+      "bytes": 155,
+      "error_kind": null
+    },
+    {
+      "method": "POST",
+      "path": "/v2/images",
+      "status": 201,
+      "expected": 201,
+      "bytes": 645,
+      "error_kind": null
+    },
+    {
+      "method": "PUT",
+      "path": "/v2/images/7d6191d1-a044-4c74-95a8-1ca9015a31f8/file",
+      "status": 204,
+      "expected": 204,
+      "bytes": 0,
+      "error_kind": null
+    },
+    {
+      "method": "POST",
+      "path": "/v2/images",
+      "status": 201,
+      "expected": 201,
+      "bytes": 648,
+      "error_kind": null
+    },
+    {
+      "method": "DELETE",
+      "path": "/v2/images/9e2325eb-9554-4fef-8020-85745178bd02",
+      "status": 204,
+      "expected": 204,
+      "bytes": 0,
+      "error_kind": null
+    },
+    {
+      "method": "POST",
+      "path": "/v2/images",
+      "status": 201,
+      "expected": 201,
+      "bytes": 648,
+      "error_kind": null
+    },
+    {
+      "method": "DELETE",
+      "path": "/v2/images/e72a9f43-05f2-4dde-8bd8-b9323c703e48",
+      "status": 204,
+      "expected": 204,
+      "bytes": 0,
+      "error_kind": null
+    },
+    {
+      "method": "POST",
+      "path": "/v2/images",
+      "status": 201,
+      "expected": 201,
+      "bytes": 648,
+      "error_kind": null
+    },
+    {
+      "method": "DELETE",
+      "path": "/v2/images/2d1a4cba-499a-41fa-9c6f-ca6164d1d1a8",
+      "status": 204,
+      "expected": 204,
+      "bytes": 0,
+      "error_kind": null
+    },
+    {
+      "method": "POST",
+      "path": "/v2/images",
+      "status": 201,
+      "expected": 201,
+      "bytes": 648,
+      "error_kind": null
+    },
+    {
+      "method": "DELETE",
+      "path": "/v2/images/4a27e1dd-b93d-4156-b809-a12f288bad4b",
+      "status": 204,
+      "expected": 204,
+      "bytes": 0,
+      "error_kind": null
+    },
+    {
+      "method": "POST",
+      "path": "/v2/images",
+      "status": 201,
+      "expected": 201,
+      "bytes": 648,
+      "error_kind": null
+    },
+    {
+      "method": "DELETE",
+      "path": "/v2/images/3509990b-4328-4080-86bd-2db045565b76",
+      "status": 204,
+      "expected": 204,
+      "bytes": 0,
+      "error_kind": null
+    },
+    {
+      "method": "DELETE",
+      "path": "/v2/images/7d6191d1-a044-4c74-95a8-1ca9015a31f8",
+      "status": 204,
+      "expected": 204,
+      "bytes": 0,
+      "error_kind": null
+    },
+    {
+      "method": "GET",
+      "path": "/v2/images/3ad3ca81-c15c-47b1-be15-d29edea52a30",
+      "status": 404,
+      "expected": 404,
+      "bytes": 155,
+      "error_kind": null
+    },
+    {
+      "method": "POST",
+      "path": "/v2/images",
+      "status": 201,
+      "expected": 201,
+      "bytes": 652,
+      "error_kind": null
+    },
+    {
+      "method": "PUT",
+      "path": "/v2/images/3ad3ca81-c15c-47b1-be15-d29edea52a30/file",
+      "status": 204,
+      "expected": 204,
+      "bytes": 0,
+      "error_kind": null
+    },
+    {
+      "method": "GET",
+      "path": "/v2/images/3ad3ca81-c15c-47b1-be15-d29edea52a30",
+      "status": 200,
+      "expected": 200,
+      "bytes": 818,
+      "error_kind": null
+    },
+    {
+      "method": "GET",
+      "path": "/v2/images/3ad3ca81-c15c-47b1-be15-d29edea52a30/file",
+      "status": 200,
+      "expected": 200,
+      "bytes": 1048576,
+      "error_kind": null
+    },
+    {
+      "method": "PATCH",
+      "path": "/v2/images/3ad3ca81-c15c-47b1-be15-d29edea52a30",
+      "status": 200,
+      "expected": 200,
+      "bytes": 826,
+      "error_kind": null
+    },
+    {
+      "method": "DELETE",
+      "path": "/v2/images/3ad3ca81-c15c-47b1-be15-d29edea52a30",
+      "status": 204,
+      "expected": 204,
+      "bytes": 0,
+      "error_kind": null
+    },
+    {
+      "method": "GET",
+      "path": "/v2/images/3ad3ca81-c15c-47b1-be15-d29edea52a30",
+      "status": 404,
+      "expected": 404,
+      "bytes": 155,
+      "error_kind": null
+    },
+    {
+      "method": "GET",
+      "path": "/v2/images/f274acd1-955c-4b92-ab2b-24a7c6c36dd8",
+      "status": 404,
+      "expected": 404,
+      "bytes": 155,
+      "error_kind": null
+    },
+    {
+      "method": "POST",
+      "path": "/v2/images",
+      "status": 201,
+      "expected": 201,
+      "bytes": 648,
+      "error_kind": null
+    },
+    {
+      "method": "PUT",
+      "path": "/v2/images/f274acd1-955c-4b92-ab2b-24a7c6c36dd8/file",
+      "status": 204,
+      "expected": 204,
+      "bytes": 0,
+      "error_kind": null
+    },
+    {
+      "method": "GET",
+      "path": "/v2/images/f274acd1-955c-4b92-ab2b-24a7c6c36dd8",
+      "status": 200,
+      "expected": 200,
+      "bytes": 812,
+      "error_kind": null
+    },
+    {
+      "method": "DELETE",
+      "path": "/v2/images/f274acd1-955c-4b92-ab2b-24a7c6c36dd8",
+      "status": 204,
+      "expected": 204,
+      "bytes": 0,
+      "error_kind": null
+    },
+    {
+      "method": "GET",
+      "path": "/v2/images/f274acd1-955c-4b92-ab2b-24a7c6c36dd8",
+      "status": 404,
+      "expected": 404,
+      "bytes": 155,
+      "error_kind": null
+    },
+    {
+      "method": "GET",
+      "path": "/v2/images?limit=1000",
+      "status": 200,
+      "expected": 200,
+      "bytes": 1056,
+      "error_kind": null
+    }
+  ],
+  "finished_utc": "2026-11-18T06:40:43.559127+00:00"
+}

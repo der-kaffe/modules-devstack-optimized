@@ -80,22 +80,28 @@ JOINT_AFTER = {'catalog_and_bytes_public': 'placement_go_active',
 JOINT_CLEANUP = ('placement_restored', 'placement_runtime_removed')
 
 
-def required_cases(joint):
-    if not joint:
-        return CASES
+def required_cases(joint, quick=False):
     out = []
     for name in CASES:
         out.append(name)
-        if name in JOINT_AFTER:
+        if joint and name in JOINT_AFTER:
             out.append(JOINT_AFTER[name])
+        if quick and name == 'catalog_and_bytes_direct':
+            out.append('quick_compare')
     return tuple(out)
+
+
+def percentile(values, fraction):
+    ordered = sorted(values)
+    return ordered[min(len(ordered) - 1, int(round(fraction * (len(ordered) - 1))))] if ordered else None
 
 
 def suite_passed(report):
     cleanup = report.get('cleanup', {})
     joint = report.get('mode') == 'glance-go+placement-go'
+    quick = 'quick_compare' in report.get('required_cases', ())
     return (report.get('execution_error') is None
-            and all(report.get('cases', {}).get(name, {}).get('passed') is True for name in required_cases(joint))
+            and all(report.get('cases', {}).get(name, {}).get('passed') is True for name in required_cases(joint, quick))
             and all(cleanup.get(name) is True for name in CLEANUP + (JOINT_CLEANUP if joint else ()))
             and cleanup.get('pending_images') == 0)
 
@@ -167,7 +173,8 @@ class Suite(Session):
         self.validator = None
         self.joint = bool(getattr(args, 'with_placement_go', False))
         self.report['mode'] = 'glance-go+placement-go' if self.joint else 'glance-go'
-        self.report['required_cases'] = list(required_cases(self.joint))
+        self.quick = bool(getattr(args, 'quick_compare', False))
+        self.report['required_cases'] = list(required_cases(self.joint, self.quick))
         self.pl_runtime = self.root / 'tt-placement-pl-runtime'
         self.provider = None
         self.flavor = None
@@ -415,6 +422,65 @@ class Suite(Session):
         self.pending.pop(('go-public-cirros', ident))
         return {}
 
+    # -- quick before/after comparison (not a campaign) ----------------------
+    def case_quick_compare(self):
+        """Direct to Glance Go with real Keystone: metadata reads, 64 MiB
+        downloads (TTFB) and uploads. Same runtime for any binary under test."""
+        from concurrent.futures import ThreadPoolExecutor
+        from glance_http import Client, payload
+        size = 64 * MIB
+        data = self.root / 'quick-64m.bin'
+        expected = payload(data, size, seed=b'glance-quick-compare')
+        ident = str(uuid.uuid4())
+        base = '/v2/images/' + ident
+        image = {'id': ident, 'name': 'tt-glance-preflight-quick', 'tags': [self.tag], 'disk_format': 'raw',
+                 'container_format': 'bare', 'visibility': 'private'}
+        self.pending[('go-quick', ident)] = {'url': GO_URL, 'name': image['name']}
+        self.request(GO_URL, 'POST', '/v2/images', 201, body=image)
+        self.request(GO_URL, 'PUT', base + '/file', 204, upload=data, content_type='application/octet-stream')
+
+        def timed(method, path, **kw):
+            client = Client(GO_URL, self.token)
+            try:
+                sample, _ = client.request(method, path, **kw)
+            finally:
+                client.close()
+            require(sample['error_kind'] is None and sample['status'] in (200, 201, 204), 'quick sample ok')
+            return sample
+
+        client = Client(GO_URL, self.token)
+        try:
+            meta = []
+            for _ in range(200):
+                sample, _ = client.request('GET', base)
+                require(sample['status'] == 200 and sample['error_kind'] is None, 'metadata read')
+                meta.append(sample['elapsed_ns'] / 1e6)
+        finally:
+            client.close()
+        started = time.monotonic()
+        with ThreadPoolExecutor(16) as pool:
+            concurrent = list(pool.map(lambda _: timed('GET', base)['elapsed_ns'] / 1e6, range(400)))
+        metadata_rps = round(400 / (time.monotonic() - started), 1)
+        downloads = [timed('GET', base + '/file', expected_payload=expected) for _ in range(10)]
+        uploads = []
+        for n in range(5):
+            other = str(uuid.uuid4())
+            body = {**image, 'id': other, 'name': 'tt-glance-preflight-quick-up'}
+            self.pending[('go-quick', other)] = {'url': GO_URL, 'name': body['name']}
+            self.request(GO_URL, 'POST', '/v2/images', 201, body=body)
+            uploads.append(timed('PUT', '/v2/images/' + other + '/file', upload=data,
+                                 content_type='application/octet-stream')['elapsed_ns'] / 1e6)
+            self.request(GO_URL, 'DELETE', '/v2/images/' + other, 204)
+            self.pending.pop(('go-quick', other))
+        self.request(GO_URL, 'DELETE', base, 204)
+        self.pending.pop(('go-quick', ident))
+        data.unlink()
+        ms = lambda values: {'p50': round(percentile(values, .5), 2), 'p95': round(percentile(values, .95), 2)}
+        return {'metadata_seq_ms': ms(meta), 'metadata_c16_ms': ms(concurrent), 'metadata_c16_rps': metadata_rps,
+                'download_64m_total_ms': ms([d['elapsed_ns'] / 1e6 for d in downloads]),
+                'download_64m_ttfb_ms': ms([d['ttfb_ns'] / 1e6 for d in downloads]),
+                'upload_64m_ms': ms(uploads)}
+
     # -- joint mode (Placement Go) --------------------------------------------
     def case_placement_go_active(self):
         site = json.loads((self.args.output / 'placement-before/report.json').read_text())['apache_site_sha256']
@@ -574,7 +640,7 @@ class Suite(Session):
 
     def execute(self):
         try:
-            for name in required_cases(self.joint):
+            for name in required_cases(self.joint, self.quick):
                 self.case(name)
         except Exception as error:
             self.report['execution_error'] = type(error).__name__
@@ -594,7 +660,7 @@ class Suite(Session):
             self.checkpoint()
         print(json.dumps({'run_id': self.report['run_id'], 'passed': self.report['passed'],
                           'cases_passed': sum(c['passed'] for c in self.report['cases'].values()),
-                          'cases_required': len(required_cases(self.joint)), 'mode': self.report['mode']}), flush=True)
+                          'cases_required': len(required_cases(self.joint, self.quick)), 'mode': self.report['mode']}), flush=True)
         return 0 if self.report['passed'] else 1
 
     def keep_diagnostics(self):
@@ -638,6 +704,8 @@ def main():
                         help='direct round-trip sizes; 1 keeps the run light, 1 16 64 matches the campaign')
     parser.add_argument('--wait-seconds', type=int, default=180)
     parser.add_argument('--lease-seconds', type=int, default=900)
+    parser.add_argument('--quick-compare', action='store_true',
+                        help='add a quick before/after timing case against Glance Go (not a campaign)')
     parser.add_argument('--with-placement-go', action='store_true',
                         help='also replace Placement: Nova schedules and claims through Placement Go')
     parser.add_argument('--placement-binary', type=Path)

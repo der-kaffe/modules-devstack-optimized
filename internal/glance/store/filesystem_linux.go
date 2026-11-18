@@ -56,7 +56,61 @@ type Filesystem struct {
 	objects *os.File
 	keysMu  sync.Mutex
 	keys    map[string]*keyLock
+	staged  map[string]stagedIdentity // guarded by keysMu
 	ops     fileOps
+}
+
+// stagedIdentity proves a .ready is the very file this instance's Stage just
+// measured: same device, inode, size and change time. ctime cannot be set by
+// unprivileged code, and any write, truncate, chmod, link or rename changes it.
+// Official Glance hashes once while writing and never re-reads; Publish skips
+// its re-read only when this proof holds, and otherwise verifies fully.
+type stagedIdentity struct {
+	dev, ino            uint64
+	size                int64
+	ctimeSec, ctimeNsec int64
+	info                Info
+}
+
+func fileIdentity(f *os.File, info Info) (stagedIdentity, bool) {
+	stat, err := f.Stat()
+	if err != nil {
+		return stagedIdentity{}, false
+	}
+	st, ok := stat.Sys().(*syscall.Stat_t)
+	if !ok {
+		return stagedIdentity{}, false
+	}
+	return stagedIdentity{dev: uint64(st.Dev), ino: st.Ino, size: st.Size, ctimeSec: st.Ctim.Sec, ctimeNsec: st.Ctim.Nsec, info: info}, true
+}
+
+func (s *Filesystem) rememberStaged(name string, id stagedIdentity) {
+	s.keysMu.Lock()
+	if s.staged == nil {
+		s.staged = map[string]stagedIdentity{}
+	}
+	s.staged[name] = id
+	s.keysMu.Unlock()
+}
+
+// unchangedSinceStage reports whether f still is the measured .ready for this
+// receipt. It consumes the record: a second Publish attempt verifies fully.
+func (s *Filesystem) unchangedSinceStage(name string, f *os.File, expected Info) bool {
+	s.keysMu.Lock()
+	want, ok := s.staged[name]
+	delete(s.staged, name)
+	s.keysMu.Unlock()
+	if !ok || want.info != expected {
+		return false
+	}
+	got, ok := fileIdentity(f, expected)
+	return ok && got == want
+}
+
+func (s *Filesystem) forgetStaged(name string) {
+	s.keysMu.Lock()
+	delete(s.staged, name)
+	s.keysMu.Unlock()
 }
 
 var _ Store = (*Filesystem)(nil)
@@ -400,6 +454,10 @@ func (s *Filesystem) Stage(ctx context.Context, key Key, src io.Reader, limit in
 	if err = s.ops.sync(s.staging); err != nil {
 		return Info{}, opError("sync stage cleanup", err)
 	}
+	// After the last link/unlink: those change ctime too.
+	if id, ok := fileIdentity(f, info); ok {
+		s.rememberStaged(name, id)
+	}
 	return info, nil
 }
 
@@ -495,12 +553,14 @@ func (s *Filesystem) Publish(ctx context.Context, key Key, expected Info) error 
 	if err = checkEntry(f, false, s.root); err != nil {
 		return err
 	}
-	actual, err := measure(ctx, f, nil, expected.Size, &expected.Size)
-	if err != nil {
-		return errors.Join(ErrIntegrity, opError("verify ready", err))
-	}
-	if actual != expected {
-		return ErrIntegrity
+	if !s.unchangedSinceStage(name, f, expected) {
+		actual, err := measure(ctx, f, nil, expected.Size, &expected.Size)
+		if err != nil {
+			return errors.Join(ErrIntegrity, opError("verify ready", err))
+		}
+		if actual != expected {
+			return ErrIntegrity
+		}
 	}
 	if err = s.ops.sync(f); err != nil {
 		return opError("sync publish file", err)
@@ -565,6 +625,35 @@ func (s *Filesystem) Open(ctx context.Context, key Key) (ReadSeekCloser, Info, e
 	return f, info, nil
 }
 
+// OpenStream opens published content for serving without measuring it.
+func (s *Filesystem) OpenStream(ctx context.Context, key Key) (ReadSeekCloser, int64, error) {
+	name, leave, err := s.enter(ctx, key)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer leave()
+	if err = ctx.Err(); err != nil {
+		return nil, 0, err
+	}
+	f, err := openEntry(s.objects, name+".blob", syscall.O_RDONLY, 0)
+	if errors.Is(err, syscall.ENOENT) {
+		return nil, 0, ErrNotFound
+	}
+	if err != nil {
+		return nil, 0, opError("open content", err)
+	}
+	if err = checkEntry(f, false, s.root); err != nil {
+		_ = f.Close()
+		return nil, 0, err
+	}
+	stat, err := f.Stat()
+	if err != nil {
+		_ = f.Close()
+		return nil, 0, opError("stat content", err)
+	}
+	return f, stat.Size(), nil
+}
+
 func (s *Filesystem) Delete(ctx context.Context, key Key) error {
 	name, leave, err := s.enter(ctx, key)
 	if err != nil {
@@ -574,6 +663,7 @@ func (s *Filesystem) Delete(ctx context.Context, key Key) error {
 	if err = ctx.Err(); err != nil {
 		return err
 	}
+	s.forgetStaged(name)
 	var result error
 	for _, item := range []struct {
 		dir    *os.File

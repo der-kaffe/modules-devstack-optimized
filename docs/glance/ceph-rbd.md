@@ -15,7 +15,7 @@ directorio local. El backend se elige al arrancar y la API no cambia:
 |---|---|
 | Stage | Crea la imagen RBD `<image>-<attempt>.part` (objetos de 4 MiB), escribe en streaming y calcula MD5/SHA-512 en el mismo paso. Si no hay Content-Length, crece en tramos de 64 MiB y se recorta al final. Si todo cuadra, la renombra a `.ready`. |
 | Publish | Relee `.ready` y compara con el recibo; crea la snapshot `snap` y la protege; renombra a `.blob`. `rbd_rename` nunca pisa un destino existente: `ErrExists`. |
-| Open | Abre `.blob@snap` en sólo lectura y mide los hashes antes de servir (mismo contrato que el disco). |
+| Open / OpenStream | `OpenStream` (descargas) abre `.blob@snap` en sólo lectura sin hashear, como glance_store. `Open` (recuperación y borrado) además mide los hashes. |
 | Delete | Borra los nombres de la clave. Si la snapshot tiene clones (discos de Nova), falla con `ErrInUse` y conserva el contenido. |
 | Exclusión | Lock exclusivo RADOS sobre el objeto marcador `glance-go-store.scope`, que además guarda el UUID de scope (equivale al flock y al marcador del disco). |
 
@@ -75,7 +75,8 @@ Las pruebas del store cubren:
 ## Hallazgo
 
 El dato de la prueba de 64 MiB es descriptivo: un OSD en RAM, en el host. `Open`
-tarda unos 0,2 s solo en verificar los hashes antes del primer byte, y después
+(el camino verificado, que hoy usan sólo la recuperación y el borrado) tarda
+unos 0,2 s en verificar los hashes antes del primer byte, y después
 la lectura tarda unos 0,3 s. Es el mismo patrón que explica el TTFB de las
 descargas grandes en la campaña v3. Con un Ceph real en red, ese costo sería
 una lectura completa extra por la red. Cambiarlo (verificar mientras se envía, o

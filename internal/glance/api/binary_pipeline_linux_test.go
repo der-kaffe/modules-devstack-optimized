@@ -6,11 +6,13 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -111,6 +113,9 @@ func (d *pipelineSQL) CompleteDataCleanup(_ context.Context, id, attempt string,
 	}
 	d.op.Phase, d.op.UpdatedAt, d.image.Status = model.DataCleaned, now, "queued"
 	return nil
+}
+func (d *pipelineSQL) DataStateSnapshot(ctx context.Context, id string) (model.DataState, error) {
+	return d.DataState(ctx, id)
 }
 func (d *pipelineSQL) DataState(ctx context.Context, id string) (model.DataState, error) {
 	d.mu.Lock()
@@ -407,5 +412,48 @@ func TestBinaryPipelineConfirmedEmptyContent(t *testing.T) {
 	h.ServeHTTP(w, binaryRequest("GET", nil))
 	if w.Code != 200 || w.Header().Get("Content-Length") != "0" || w.Header().Get("Content-MD5") != "d41d8cd98f00b204e9800998ecf8427e" {
 		t.Fatal(w.Code, w.Header())
+	}
+}
+
+// Real HTTP server (not a recorder) so net/http takes the ReadFrom/sendfile
+// path through the logging wrapper; full and ranged bytes must be exact.
+func TestBinaryPipelineZeroCopyOverRealHTTP(t *testing.T) {
+	h, _, _ := pipelineHarness(t, true, pipelineIdentity("member", "reader"), 8<<20)
+	payload := bytes.Repeat([]byte("0123456789abcdef\x00\xff"), (3<<20)/18+5)
+	put := httptest.NewRecorder()
+	h.ServeHTTP(put, binaryRequest("PUT", bytes.NewReader(payload)))
+	if put.Code != 204 {
+		t.Fatal(put.Code, put.Body.String())
+	}
+	server := httptest.NewServer(h)
+	defer server.Close()
+	get := func(rangeHeader string) (*http.Response, []byte) {
+		t.Helper()
+		req, err := http.NewRequest("GET", server.URL+binaryPath, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("X-Auth-Token", "fixture-token")
+		if rangeHeader != "" {
+			req.Header.Set("Range", rangeHeader)
+		}
+		resp, err := server.Client().Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return resp, body
+	}
+	resp, body := get("")
+	if resp.StatusCode != 200 || !bytes.Equal(body, payload) || resp.Header.Get("Content-Length") != strconv.Itoa(len(payload)) {
+		t.Fatal("full download differs", resp.StatusCode, len(body))
+	}
+	resp, body = get("bytes=100-1099")
+	if resp.StatusCode != 206 || !bytes.Equal(body, payload[100:1100]) || resp.Header.Get("Content-Range") != fmt.Sprintf("bytes 100-1099/%d", len(payload)) {
+		t.Fatal("ranged download differs", resp.StatusCode, len(body))
 	}
 }

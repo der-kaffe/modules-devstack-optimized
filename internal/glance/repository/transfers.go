@@ -23,5 +23,7 @@ type Transfers interface {
 	BeginDataCleanup(context.Context, string, string, string, *string, time.Time) error
 	CompleteDataCleanup(context.Context, string, string, time.Time) error
 	DataState(context.Context, string) (model.DataState, error)
+	// DataStateSnapshot: same data, non-locking; only for read-only GET paths.
+	DataStateSnapshot(context.Context, string) (model.DataState, error)
 	ListDataOperations(context.Context, string, int) ([]model.DataOperation, error)
 }

@@ -254,6 +254,18 @@ class SuiteGuardTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'placement-binary'):
                 suite.run(args)
 
+    def test_quick_compare_is_optional_and_runs_after_direct_bytes(self):
+        quick = suite.required_cases(False, True)
+        self.assertEqual(quick.index('quick_compare'), quick.index('catalog_and_bytes_direct') + 1)
+        self.assertNotIn('quick_compare', suite.required_cases(True))
+        report = {'execution_error': None, 'required_cases': list(quick),
+                  'cases': {n: {'passed': True} for n in suite.CASES},
+                  'cleanup': {**{n: True for n in suite.CLEANUP}, 'pending_images': 0}}
+        self.assertFalse(suite.suite_passed(report))  # quick requested but not passed
+        report['cases']['quick_compare'] = {'passed': True}
+        self.assertTrue(suite.suite_passed(report))
+        self.assertEqual(suite.percentile([5, 1, 3, 2, 4], .5), 3)
+
     def test_server_image_id_accepts_sdk_shapes(self):
         self.assertEqual(suite.server_image_id(SimpleNamespace(image={'id': IMAGE})), IMAGE)
         self.assertEqual(suite.server_image_id(SimpleNamespace(image=SimpleNamespace(id=IMAGE))), IMAGE)
