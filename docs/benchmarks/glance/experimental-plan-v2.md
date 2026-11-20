@@ -1,0 +1,13 @@
+# Enmienda experimental v2 — 31 de octubre de 2026
+
+La v1 se conserva como protocolo de pilotos. La calibración real demostró 36 ventanas HTTP válidas con los trece escenarios, concurrencias 1/2/4 y tamaños de 1/16/64 MiB. No se aceptan sus métricas de proceso: la incertidumbre de reloj excedió 100 ms. Un segundo intento reutilizó UUID borrados y recibió 409; queda conservado como fallo del coordinador. Un tercer intento, con namespace nuevo y SSH persistente, validó seis ventanas HTTP/CPU/PSS sin relajar el gate.
+
+El perfil de un worker por API recuperó capacidad real. La VM mantiene 4 GiB para HTTP, cuatro vCPU y los mismos servicios de autenticación, almacenamiento y proxy para ambos tratamientos. Nova/Neutron se detienen exclusivamente en los bloques HTTP independientes. Los gates Nova A/B/C/D se realizaron con esos servicios presentes. No se extrapola ese rendimiento a despliegues mayores.
+
+El protocolo v2 fija cinco repeticiones, warm-up de 30 segundos y medición de 90 segundos. Esta ventana proporciona alrededor de 90 muestras de proceso, permite bloques completos bajo el supervisor finito y difiere explícitamente de B16 (120 segundos). No reduce las repeticiones ni demuestra estabilidad de horas. El primer bloque oficial seleccionado antes de medir comprende `show/c1` y `download/c1/16 MiB`. Los demás casos siguen pendientes aunque este bloque pase. Se conservará cada intento fallido; no se repetirán selectivamente sólo ventanas lentas.
+
+La hipótesis por operación es una diferencia de mediana de latencia, goodput y CPU por operación entre implementaciones. PSS describe memoria proporcional y RSS se publica por separado. Se contrastarán los cinco pares, alternando Python/Go. Los percentiles por ventana no se promedian como si fueran percentiles globales. La autenticación, los workers, la configuración de DB, durabilidad, caché y diferencias de arquitectura limitan la atribución causal al lenguaje.
+
+El recibo de entrada fija hashes de protocolo, instrumento y evidencia de gates. No sustituye la revisión de sus fuentes. El coordinador mantiene las ventanas sin aceptación automática y sólo permite declarar un bloque utilizable después de verificar limpieza y restauración completa. La campaña global requiere todos los casos declarados, no sólo los dos primeros.
+
+El supervisor conserva el XML persistente de 6 GiB, la identidad de la VM y los backups de configuración. No modifica código productivo, bases originales ni instancias históricas. Los recursos de prueba llevan identificadores exclusivos de intento, caso y repetición. Los namespaces se comparten por par Python/Go, nunca entre intentos contra el mismo backend.

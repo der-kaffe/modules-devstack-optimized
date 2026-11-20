@@ -1,0 +1,166 @@
+{
+  "schema": 1,
+  "protocol": "glance-v4-isolated-catalogs",
+  "status": "frozen",
+  "frozen_utc": "2026-10-31T14:57:26.786632+00:00",
+  "seed": 20261031,
+  "load_model": "closed-loop",
+  "warmup_s": 30,
+  "measurement_s": 90,
+  "repetitions": 5,
+  "request_timeout_s": 30,
+  "sampling_interval_s": 1,
+  "cases": [
+    [
+      "create",
+      1,
+      null
+    ],
+    [
+      "list",
+      1,
+      null
+    ],
+    [
+      "patch",
+      1,
+      null
+    ],
+    [
+      "delete",
+      1,
+      null
+    ],
+    [
+      "pagination",
+      1,
+      null
+    ],
+    [
+      "filter",
+      1,
+      null
+    ],
+    [
+      "metadata-mix",
+      1,
+      null
+    ],
+    [
+      "crud",
+      1,
+      null
+    ],
+    [
+      "upload",
+      1,
+      1048576
+    ],
+    [
+      "download",
+      1,
+      1048576
+    ],
+    [
+      "range",
+      1,
+      1048576
+    ],
+    [
+      "binary-mix",
+      1,
+      1048576
+    ],
+    [
+      "show",
+      4,
+      null
+    ],
+    [
+      "download",
+      2,
+      16777216
+    ],
+    [
+      "upload",
+      1,
+      16777216
+    ],
+    [
+      "download",
+      1,
+      67108864
+    ],
+    [
+      "range",
+      1,
+      67108864
+    ],
+    [
+      "download",
+      1,
+      16777216
+    ]
+  ],
+  "order": "paired implementations; Python then Go in odd repetitions; reverse in even repetitions",
+  "case_order": "Protocol order for eighteen remaining cases; one case per VM session; failed cases retained and unrelated cases continue only after full restoration and verified OFF.",
+  "window_rationale": "90 one-second resource samples target steady HTTP behavior in a finite laboratory lease; 30-second warm-up; five independent paired blocks retained. This departs explicitly from Placement B16 120 seconds. Shorter windows cannot represent long-term stability.",
+  "payload_rationale": "1/16/64 MiB calibrated against 64 MiB effective Go upload limit, >=1.8 GiB guest available in pilots and existing store/disk free space. Payloads streamed and independently SHA-512 verified.",
+  "deployment": {
+    "vm_memory_mib": 4096,
+    "vcpus": 4,
+    "python_uwsgi_workers": 1,
+    "go_glance_gomaxprocs": 1,
+    "go_transfer_limit": 2,
+    "go_upload_max_bytes": 67108864,
+    "authentication": "real Keystone, unchanged policy; dedicated service-project validator",
+    "proxy": "same original Apache route settings; only backend address switched",
+    "standalone_profile": "Nova and Neutron stopped only during HTTP block; original states restored by finite systemd budget",
+    "databases": "Original Python source/WSGI with its own schema/store; Go with a separate schema/store, both in the same fresh experimental native MySQL instance per case. Original MySQL/catalog untouched.",
+    "mysql_controls": {
+      "version": "8.0.46-0ubuntu0.24.04.4",
+      "innodb_buffer_pool_size_bytes": 16777216,
+      "max_connections": 1024,
+      "innodb_flush_log_at_trx_commit": 1,
+      "sync_binlog": 1
+    },
+    "database_control_matching": "Read original controls only, match experimental server before each case; record version/server UUID/controls. Original server remains independently identified."
+  },
+  "entry_gates": [
+    "keystone-real",
+    "metadata-equivalent",
+    "binary-hashes-equivalent",
+    "cleanup",
+    "restore",
+    "capacity",
+    "resource-clock"
+  ],
+  "invalidity": [
+    "any HTTP or semantic error",
+    "missing cleanup",
+    "changed protocol/instrument",
+    "clock uncertainty >=100ms",
+    "process membership changed inside measurement",
+    "memory reserve breach",
+    "sustained swap-out",
+    "partial paired block",
+    "restoration failure"
+  ],
+  "analysis": "per-run percentiles; paired repetition is independent unit; bootstrap descriptive intervals only with >=5 pairs; no causal attribution to language alone",
+  "acceptance": "Five complete alternating pairs per case plus raw verification and full laboratory restoration. No pooling across v3/v4. All eighteen cases required for complete v4; SHOW v3 remains separate accepted evidence.",
+  "official_execution_enabled": true,
+  "supersedes": "v3 is retained for accepted SHOW/c1 only; v4 measures the other eighteen cases in isolated catalogs",
+  "require_environment": true,
+  "replication_limitations": "Five temporal paired blocks share each case deployment; cleanup removes visible resources but tombstones, caches and temporal correlation may remain. Bootstrap intervals are descriptive; no request-level pseudoreplication.",
+  "host_capacity_policy": {
+    "minimum_available_bytes": 805306368,
+    "maximum_full_psi_avg10_percent": 1.0,
+    "sustained_swapout_bytes_per_s": 1048576,
+    "sustained_swapout_seconds": 9,
+    "page_size_bytes": 4096
+  },
+  "host_control_rationale": "Prespecified v4 host gate: reject OOM, low available memory, full-memory PSI >=1% (10-second average), or >=1MiB/s swap-out for >=9 consecutive seconds. Isolated bursts and occupancy retained and reported, not silently removed. Guest zero-swap-out acceptance remains unchanged.",
+  "metric_boundaries": "Latency per selected HTTP request: setup/send through bounded body read and streaming digest, excluding JSON/semantic validation. Goodput counts selected correct requests over the whole measurement interval, including time spent in unmeasured control requests. CRUD request throughput is not CRUD cycles/s. Upload MiB/s includes create/verify/delete control time in the closed loop. Range scenarios serve prefix bytes0..65535 of the declared source payload.",
+  "require_raw_binary_integrity": true,
+  "raw_integrity": "Streaming client digests retained per response; full download SHA256/SHA512 rechecked from raw samples against independently computed payload digests. Expected first64KiB range SHA256 retained for offline revalidation. No traffic files loaded wholly into memory."
+}

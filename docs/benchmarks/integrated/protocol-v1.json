@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "protocol": "openstack-integrated-v1-draft",
+  "status": "draft-awaiting-ABCD-gates",
+  "seed": 20261031,
+  "configurations": {"A": ["python", "python"], "B": ["go", "python"], "C": ["python", "go"], "D": ["go", "go"]},
+  "factor_order": ["glance", "placement"],
+  "comparisons": [["A", "B"], ["A", "C"], ["A", "D"], ["B", "D"], ["C", "D"]],
+  "interaction": "D-B-C+A",
+  "concurrency": 1,
+  "repetitions": 5,
+  "boot_timeout_s": 600,
+  "delete_timeout_s": 180,
+  "poll_interval_s": 1,
+  "sampling_interval_s": 1,
+  "entry_gates": ["A-real-Nova-ACTIVE", "B-real-Nova-ACTIVE", "C-real-Nova-ACTIVE", "D-real-Nova-ACTIVE", "allocations-cleanup", "restore", "capacity"],
+  "official_execution_enabled": false
+}

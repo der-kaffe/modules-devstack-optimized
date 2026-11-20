@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "protocol": "glance-v1-draft",
+  "status": "draft-awaiting-lab-pilot",
+  "seed": 20261031,
+  "load_model": "closed-loop",
+  "metadata_concurrency_candidates": [1, 4, 8, 16],
+  "binary_concurrency_candidates": [1, 2],
+  "payload_bytes_candidates": [1048576, 16777216, 67108864],
+  "payload_selection": "requires guest/store capacity and effective upload limit; not frozen",
+  "warmup_s": 30,
+  "measurement_s": 120,
+  "repetitions": 5,
+  "request_timeout_s": 30,
+  "sampling_interval_s": 1,
+  "max_owned_images_per_worker": 4,
+  "metadata_scenarios": ["create", "list", "show", "patch", "delete", "pagination", "filter", "metadata-mix", "crud"],
+  "binary_scenarios": ["upload", "download", "range", "binary-mix"],
+  "entry_gates": ["keystone-real", "metadata-equivalent", "binary-hashes-equivalent", "cleanup", "restore", "capacity"],
+  "official_execution_enabled": false
+}

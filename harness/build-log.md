@@ -760,3 +760,101 @@ Revalidación del 28/10/2026: se ejecutó `GOMAXPROCS=2 GOTOOLCHAIN=local make c
 - Arranque oficial01 sin ventanas: known_hosts ignorado no existía en el nuevo worktree; SSH falló antes de ejecutar el coordinador. Intento y prueba del original activo/directorios remotos ausentes conservados.
 - Guard de archivos SSH/protocolo legibles antes de crear outputs/estado o lanzar SSH; test reproduce ausencia de la caché y exige cero efectos. Ruta absoluta original de confianza para el nuevo intento. No se deshabilita verificación de host.
 - Instrumentos HTTP, coordinador VM y recolector iguales al piloto07; sólo cambia preflight del driver. Campaña240 pendiente, sin reclasificar este fallo como éxito.
+
+### 2026-10-31 — RF10/B20/B25/B26: instrumentos piloto y evaluación integrada preparada
+
+- Base fa116a89b8bcd9e7c2d250c0a8b06800f0c29fa1 verificada con refs públicas y
+  PR5/16. Worktree nuevo modules-devstack-benchmarks-endtoend, rama local
+  feat/glance-openstack-benchmarks. No se ejecutó staging/commit/push/PR ni el
+  supervisor Placement que los automatiza. Producción Glance/Placement intacta.
+- Auditoría y plan previos a implementación; protocolos propios Glance e
+  integrado en estado draft, oficiales deshabilitados. No se altera Placement
+  B16, Excel ni evidencia histórica. [Informe](../docs/benchmarks/evaluation-report-20261031.md).
+- Generador Glance piloto:13 escenarios, streaming256KiB/hashes, deadlines,
+  límites, propiedad, ledger anterior a POST y cleanup/recovery. Observador Nova
+  secuencial: intent previo, ACTIVE/allocations, respuesta perdida y borrado propio;
+  no cambia servicios ni certifica configuración efectiva A/B/C/D.
+- Planificador reproducible, análisis raw/CSV, pares/bloques e interacción,
+  bootstrap por repeticiones (sin IC con n<5); reutiliza recolector CPU/PSS B18.
+  Tests de HTTP independiente/gateway doble cubren corrupción/timeout, errores,
+  concurrencia/páginas, recuperación, recursos ajenos y no aceptación oficial.
+- Validación local conservada:14 ventanas local-test completas, sin imágenes
+  remanentes del doble; análisis raw exit0. make check exit0, con GOMAXPROCS2,
+  GOFLAGS-p=1 y MAKEFLAGS-j1, incluye vet/race/build ambos dominios. Los logs y
+  hashes finales están en el workspace externo indicado por el informe.
+- Ensayo real de capacidad: VM identificada de4vCPU/6GiB apagada inicialmente.
+  Tras verificar>=5GiB disponibles en host, arranque temporal4GiB supervisado;
+  config persistente6GiB restaurada inmediatamente y hash XML igual. Guest con
+  sólo144288KiB disponibles y1585.32MiB de swap usada: gate de capacidad fallido,
+  sin carga de rendimiento ni boot Nova. Ocho servicios originales activos,
+  probes sin auth Glance401/Placement200, sin OOM observado; instancia histórica
+  retenida apagada. No se creó token/imagen/instancia ni se cambió SQL/endpoints.
+- Host key antigua no coincidía: identidad comprobada con guest-agent libvirt y
+  MAC/IP; known_hosts nuevo externo, sin sustituir el original. VM apagada
+  ordenadamente; supervisor RESTORED_OFF, XML persistente idéntico al respaldo.
+- Piloto07 Placement reanalizado desde raw HTTP/procesos:24/24 válidas, cero
+  errores; n1 por celda, no240 oficiales. CSV y8 figuras PNG/PDF explícitamente
+  históricas/piloto, fuera de Git. B17/B18 continúan pendientes.
+- No hay piloto Glance real, gate D ni campaña oficial nueva. B26 histórico
+  demuestra boot individual con N7 parcial fallido, no cierre conjunto. Faltan
+  capacidad estable, despliegue/switch/restore conjunto probado, calibración y
+  congelación, gates A/B/C/D y mediciones repetidas. No se atribuyen mejoras no
+  observadas ni se dejan campañas publicadoras/duraderas ejecutándose.
+
+### 2026-10-31 — B20/B25/B26: recuperación y aceptación experimental parcial
+
+- Perfil reversible de workers y separación de ventanas HTTP/Nova recuperaron
+  capacidad; no se modificaron fuentes productivas ni el host permanentemente.
+  Gates reales A/B/C/D alcanzaron ACTIVE, verificaron allocations y limpiaron
+  recursos propios. D tiene evidencia de tráfico simultáneo de ambos Go; los
+  tiempos de calibración no son comparaciones oficiales por diferencias de RAM.
+- Glance SHOW v3: diez ventanas oficiales, cinco pares alternados, warm-up30s y
+  medición90s, cero errores/swap-out, reloj y CPU/PSS válidos. Restauración final
+  y revalidación raw aceptaron exclusivamente ese bloque, uno de19 casos.
+  p50 mediana9,634889/12,367557ms Python/Go; goodput98,504227/77,592210ops/s.
+  Go usa menos CPU/PSS del API, pero Keystone consume más por validar cada token
+  de usuario. No se infiere ahorro total ni causalidad exclusiva del lenguaje.
+- Nuevo controlador de sesiones privadas: prototipo normal01 falló por muestras
+  insuficientes (ventana4s) y servicios Nova inactivos tras restaurar workers;
+  conservó evidencia, dejó NEEDS_ATTENTION y no forzó apagado. Reparación verificada
+  restauró servicios/configuraciones/recursos/XML y apagó ordenadamente la VM.
+  Se añade verificación real de flock por PID/inode, metadatos tempranos de
+  recuperación y pin de environment para futuros protocolos que lo requieran.
+- Reanudación: lectura/escritura, sockets locales, red y libvirt system verificados;
+  sudo host sin contraseña no disponible. Nuevo piloto normal02 (warm2/8s) bloqueado
+  antes de arrancar por AC desconectado; VM permanece OFF. Pruebas reales completas
+  normal+SIGTERM del nuevo controlador y protocolo siguiente siguen pendientes.
+- make check PASS tras primeras correcciones: Python/harness y Go vet/race/build;
+  después dos tests adicionales usan flock real y rechazan marcador obsoleto/PID
+  ausente/unidad ajena. Validación final posterior registrada fuera de Git.
+- Placement conserva piloto07 (24ventanas, n1), no campaña oficial completa ni
+  aceptación B17/B18. No se ejecutó publicación Git automática. Sin staging,
+  commits, push, PR, cambios de ramas ni alteraciones de evidencia histórica.
+- Informe y procedencia: docs/benchmarks/results-20261031.md y workspace privado
+  6fda7b8234e406137f334ff3f21c9a99/benchmark-resume-20261031. Glance completo e
+  integración estadística A/B/C/D permanecen pendientes; no se inventan métricas.
+
+### 2026-10-31 — B20/B25/B26: continuación con corriente y recuperación probada
+
+- AC conectado, host5,2GiB disponible/PSI0 y sin competidor antes del arranque.
+- Diagnóstico del colector: faltaba sample_processes.py en el bundle remoto nuevo;
+  produjo cero muestras. La hipótesis inicial sobre duración4s no era la causa.
+  Corregida dependencia transitiva, import preflight, disponibilidad inicial y
+  detección de salida del proceso; regresión con directorio vacío PASS.
+- normal04 PASS: cuatro ventanas reales CRUD/download16MiB Python/Go, CPU/PSS,
+  integridad/HTTP y restauración completa con OFF verificado. abort01 PASS:
+  SIGTERM al padre tras detectar muestras Measurement, parcial conservado y
+  restauración completa/OFF. Nunca se presenta el aborto como benchmark válido.
+- make check pre-pilots PASS97testsPython+13harness+Go vet/race/build. Nuevo
+  supervisor secuencial prueba continuidad tras fallo sólo con restauración
+  verificable; no escribe Git. Control de suspensión y plazos finitos.
+- Primer arranque systemd terminó antes de boot por locale español de libvirt;
+  LC_ALL=C fijado explícitamente. Test de estado traducido PASS. Nuevo bloque
+  de16pilotos privado en curso; no contar como oficial ni como completo antes
+  de finalizar. Fuentes congeladas separadas por intento, sin sobrescrituras.
+- SHOWv3 preservado: guest swap-out0; el host sí tuvo ráfagas aisladas. PSI full
+  máximo0,29% y sin ráfaga sostenida>=1MiB/s por9s; las10ventanas pasan esa
+  comprobación prospectiva. Se conserva el detalle, no se descartan pares.
+- Protocolo v4 DRAFT18casos restantes: catálogos Python/Go separados en MySQL
+  experimental común y controlado;5pares30/90; gate adicional explícito de
+  host RAM/PSI/OOM/swap y SHA de environment. No oficial v4 iniciada aún.
