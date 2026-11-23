@@ -13,7 +13,7 @@ Reimplementación en Go de dos servicios de OpenStack, **Glance** (imágenes) y 
 
 - **Glance Go:** catálogo (crear, listar, ver, editar, borrar), subida y descarga, autenticación Keystone con caché de tokens, notificaciones `image.*` y plugin de DevStack que sustituye a `g-api` por `g-go`. Detalle en [`docs/glance/`](docs/glance/replace-original.md) y [`docs/glance/devstack-plugin.md`](docs/glance/devstack-plugin.md).
 - **Placement Go:** providers, inventories, clases y traits, allocations con generation y consumers, candidates del perfil plano y políticas de Keystone. Detalle en [`docs/placement/`](docs/placement/b07-acceptance.md).
-- **En curso (pull requests abiertas):** la API v2 completa de Glance (miembros, tareas, importación, metadefs, caché, cuotas, políticas, varios stores) con `glance-manage`, `glance-cache-pruner`, `glance-cache-cleaner` y `glance-scrubber` también en Go, y la instalación por defecto sin nada de Glance en Python.
+- **Pendiente de llegar a `main`:** la API v2 completa de Glance (miembros, tareas, importación, metadefs, caché, cuotas, políticas, varios stores), `glance-manage`, `glance-cache-pruner`, `glance-cache-cleaner` y `glance-scrubber` en Go, y la instalación por defecto sin Glance en Python. Está implementado y mergeado en la rama `perf/glance-full-api` del repo de Paolo.
 
 ## Uso rápido
 
