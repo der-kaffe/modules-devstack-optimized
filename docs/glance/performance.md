@@ -167,4 +167,4 @@ notificaciones. Se corrió en el PC de Juan y quedó aceptada (108/108).
 **Go gana en las 18 celdas**, incluidas las que perdía en la v3: la consulta
 (de 0,81 a 5,3) y las descargas de 16 y 64 MiB (de 0,24–0,31 a 1,09–2,47).
 Los valores absolutos no se comparan con la v3, porque el hardware es otro.
-[Evidencia](../../evidence/sprint5/benchmarks/glance-compact-v4-pcjuan-20261119/README.md).
+Evidencia.

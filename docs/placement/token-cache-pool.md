@@ -39,7 +39,7 @@ ya visto por los dos.
 ## Resultado en la VM (2026-11-20)
 
 Protocolo `placement-compact-v2-reads`: 36/36 ventanas válidas, 0 errores,
-original restaurado y VM apagada. [Evidencia](../../evidence/sprint5/benchmarks/placement-compact-v2-reads-20261120/README.md).
+original restaurado y VM apagada. Evidencia.
 Medianas de tres pares; entre corchetes, el rango observado del cociente pareado.
 
 | Carga | Conc. | Python ops/s | Go ops/s | Go/Python | p50 Py/Go (ms) | p99 Py/Go (ms) |
@@ -64,7 +64,7 @@ al lenguaje.
 ### Candidates, claim-cycle y nova-mix
 
 Protocolo `placement-compact-v2-nova`, mismo binario: 36/36 ventanas válidas,
-0 errores, original restaurado y VM apagada. [Evidencia](../../evidence/sprint5/benchmarks/placement-compact-v2-nova-20261120/README.md).
+0 errores, original restaurado y VM apagada. Evidencia.
 
 | Carga | Conc. | Python ops/s | Go ops/s | Go/Python | p50 Py/Go (ms) | p99 Py/Go (ms) | Go oct → nov |
 |---|---:|---:|---:|---:|---:|---:|---:|

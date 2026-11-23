@@ -133,7 +133,7 @@ virsh, corregida con LC_ALL=C; no requiere repetir mediciones.
 
 Trabajo nuevo en /home/paolo/Proyectos/TrabajoTitulo/.worktrees/glance-compact-v2,
 rama feat/glance-compact-v2. Instrumentos 85a78de y preflight real 42/42 aprobado,
-con [evidencia](../../evidence/sprint5/benchmarks/glance-v2-functional-preflight-20261031/README.md).
+con evidencia.
 Glance v2 todavía NO tiene piloto de rendimiento ni ventanas oficiales.
 Pendientes: RPC/coordinador, análisis CPU/PSS, supervisor durable, piloto36,
 congelación y oficial108; luego conjunta24bloques/36boots. No usar las matrices

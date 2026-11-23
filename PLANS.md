@@ -17,7 +17,7 @@ Las fases son agrupaciones de aceptación, no una prohibición de avanzar en par
 
 **B16 completado técnicamente para Placement:** [protocolo experimental](docs/benchmarks/methodology.md),
 instrumentos de lectura/CPU/PSS, tests y dos pilotos reales de calibración.
-[Resultados del piloto](evidence/sprint4/benchmarks/b16-20261029/README.md).
+Resultados del piloto.
 **B13 completado técnicamente:** [sustitución reversible](docs/placement/b13-integration.md),
 publicación real del compute, cliente Nova 1.36 y rollback verificados.
 **B14 completado técnicamente:** [boot Nova real](docs/placement/b14-acceptance.md),
@@ -27,7 +27,7 @@ restaurado, identidad/runtime propios retirados y VM apagada.
 dos corridas finales consecutivas 11/11, con ocho verificaciones de limpieza cada
 una, recursos propios nuevos y original restaurado. VM apagada.
 <!-- placement-b17-b18-status:start -->
-**B17/B18 completados técnicamente, 2026-10-31:** 72/72 ventanas válidas, protocolo placement-compact-v2; 3 pares por celda, concurrencias [1, 16], warm-up 10s/carga 30s. Análisis CPU/PSS correlacionado aprobado para este perfil. Ver [B17](docs/benchmarks/b17-results.md) y [B18](docs/benchmarks/b18-results.md). Original restaurado, limpieza comprobada y VM apagada. Excel/S2 conservan su aceptación histórica.
+**B17/B18 completados técnicamente, 2026-10-31:** 72/72 ventanas válidas, protocolo placement-compact-v2; 3 pares por celda, concurrencias [1, 16], warm-up 10s/carga 30s. Análisis CPU/PSS correlacionado aprobado para este perfil. Ver B17 y B18. Original restaurado, limpieza comprobada y VM apagada. Excel/S2 conservan su aceptación histórica.
 <!-- placement-b17-b18-status:end -->
 
 ## Revisión compacta v2 autorizada, 2026-10-31

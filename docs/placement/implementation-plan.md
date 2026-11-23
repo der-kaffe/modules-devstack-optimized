@@ -182,4 +182,4 @@ y tres pilotos24/24 válidos HTTP/CPU/PSS. El coordinador ejecuta las240 ventana
 oficiales B16 sin recortar duraciones/repeticiones. El piloto no cierra B17/B18;
 el cierre exige datos oficiales, análisis, limpieza y restauración.
 
-Actualización 2026-10-31: B17/B18 cerrados técnicamente con [latencia/throughput](../benchmarks/b17-results.md) y [CPU/PSS](../benchmarks/b18-results.md), 72 ventanas válidas bajo placement-compact-v2, original restaurado y VM apagada.
+Actualización 2026-10-31: B17/B18 cerrados técnicamente con latencia/throughput y CPU/PSS, 72 ventanas válidas bajo placement-compact-v2, original restaurado y VM apagada.

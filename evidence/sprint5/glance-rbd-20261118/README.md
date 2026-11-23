@@ -51,4 +51,4 @@ cliente en el mismo host. Stage 299 ms, Publish (verificación y snapshot)
 - Autenticación por doble de prueba en la B25. Keystone real se probó por separado en la suite B26.
 - Nova todavía no usa RBD: faltan `direct_url` y `images_type=rbd` (fases F3 y F4 en `docs/glance/ceph-rbd-projection.md`).
 
-Ver [docs/glance/ceph-rbd.md](../../../docs/glance/ceph-rbd.md).
+Ver docs/glance/ceph-rbd.md.

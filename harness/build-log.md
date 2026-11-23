@@ -936,7 +936,7 @@ Revalidación del 28/10/2026: se ejecutó `GOMAXPROCS=2 GOTOOLCHAIN=local make c
 - Fuente 85a78de, sin cambios productivos Go: 42/42 solicitudes correctas con
   Keystone real, MySQL/store propios, metadatos y bytes íntegros; Python 1 MiB,
   Go directo 1/16/64 MiB y Go público Apache 1 MiB. Payloads y credenciales fuera
-  de Git. [Evidencia](../evidence/sprint5/benchmarks/glance-v2-functional-preflight-20261031/README.md).
+  de Git. Evidencia.
 - Placement original se mantuvo como control; catálogo original y hashes Apache
   iguales antes/después. Runtime/identidad/bytes propios retirados, controles
   restaurados, todos los originales activos y VM apagada normalmente.
@@ -975,7 +975,7 @@ Revalidación del 28/10/2026: se ejecutó `GOMAXPROCS=2 GOTOOLCHAIN=local make c
   CacheFilter crea Notifier/get_transport por cached request; acumulación de
   transports/sockets es hipótesis a contrastar mediante calibración dedicada.
 - Diagnóstico de sólo lectura, originales/restauración verificados y VM apagada.
-  [Evidencia](../evidence/sprint5/benchmarks/glance-compact-v2-20261031-01/README.md).
+  Evidencia.
 - Se prepara v3 (misma matriz108) para comparar API/catálogo/bytes sin bus de
   notificaciones, fuera del alcance Go. Driver oficial noop en copia privada,
   OS_GLANCE_CONFIG_DIR mediante dropin sólo /run; originales/caché/límites sin
@@ -990,7 +990,7 @@ Revalidación del 28/10/2026: se ejecutó `GOMAXPROCS=2 GOTOOLCHAIN=local make c
   sockets por worker respaldan acumulación de transportes por cached request.
 - Control temporal OS_GLANCE_CONFIG_DIR en /run restaurado y hashes originales
   iguales; caché y límite2048 intactos. Recursos propios retirados y VM apagada.
-  [Evidencia](../evidence/sprint5/benchmarks/glance-v3-fd-calibration-20261031/README.md).
+  Evidencia.
 - No es benchmark de rendimiento (cliente VM-local). V3 mide API/bytes sin bus
   RabbitMQ; piloto36 y oficial108 todavía pendientes. V2 fallido preservado.
 - Se añade guarda de crecimiento FD máximo256 por ventana, sin aceptar datos
@@ -1185,8 +1185,8 @@ Revalidación del 28/10/2026: se ejecutó `GOMAXPROCS=2 GOTOOLCHAIN=local make c
   Límites: otro hardware (VM de 6 GiB). No se comparan los valores absolutos
   con la v3; solo la dirección Go/Python. La primera corrida del piloto
   encontró el deadlock corregido en `525608f`.
-  [Evidencia](../evidence/sprint5/benchmarks/glance-compact-v4-pcjuan-20261119/README.md)
-  y [resultados](../docs/benchmarks/glance-results-v4-pc-juan-20261119.md).
+  Evidencia
+  y resultados.
 - 2026-11-20, Glance Go sobre el catálogo y el store del Glance original
   (`GLANCE_GO_CATALOG=official`, `glance_replace.py install`), pedido por Juan.
   - **Implementación:** Glance Go lee y escribe las tablas `images`,
@@ -1258,7 +1258,7 @@ Revalidación del 28/10/2026: se ejecutó `GOMAXPROCS=2 GOTOOLCHAIN=local make c
   reactivados y VM apagada.
 - **Límites:** tres pares, sin significancia estadística; las otras tres cargas
   no se repitieron con el binario nuevo.
-  [Evidencia](../evidence/sprint5/benchmarks/placement-compact-v2-reads-20261120/README.md).
+  Evidencia.
 
 ### 2026-11-20 — Placement: re-medición de candidates, claim-cycle y nova-mix
 
@@ -1271,7 +1271,7 @@ Revalidación del 28/10/2026: se ejecutó `GOMAXPROCS=2 GOTOOLCHAIN=local make c
   estable entre repeticiones y sin causa identificada; infla los cocientes.
 - **Laboratorio:** original sin cambios, recursos propios retirados, timers apt
   reactivados y VM apagada.
-  [Evidencia](../evidence/sprint5/benchmarks/placement-compact-v2-nova-20261120/README.md).
+  Evidencia.
 - 2026-11-20, método de RAM de las campañas de Glance:
   - **Cambios:** se agrega `glance_memory.py` (cgroup v2 `memory.stat`
     `anon`/`file` a 10 Hz por unidad) y memcached como grupo de control. El
@@ -1310,7 +1310,7 @@ Revalidación del 28/10/2026: se ejecutó `GOMAXPROCS=2 GOTOOLCHAIN=local make c
     del PC con chrony y `ptp_kvm`, con un desfase de 0,00–0,01 ms. Se fue
     directo a la oficial, porque el piloto ya había pasado 72/72.
   - Revisión medida `7e922cd`, binario `67e58def…`.
-    [Resultados](../docs/benchmarks/glance-results-v5-pc-juan-20261121.md).
+    Resultados.
     La evidencia cruda queda fuera del repositorio (en el PC de Juan).
 - 2026-11-21, protocolo Glance compact v6: la matriz y la ruta de la v5,
   ahora con las mismas condiciones de datos para los dos.
@@ -1431,4 +1431,4 @@ Revalidación del 28/10/2026: se ejecutó `GOMAXPROCS=2 GOTOOLCHAIN=local make c
     C=1) a ×39,6 (subir 1 MiB, C=16); PSS 16–53 MiB frente a 233–239 MiB.
     El original subió un 30–37 % más lento que en la v5 en el DevStack
     reinstalado: los factores se comparan dentro de cada campaña.
-    [Resultados](../docs/benchmarks/glance-results-v6-pc-juan-20261122.md).
+    Resultados.

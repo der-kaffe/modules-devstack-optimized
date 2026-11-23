@@ -8,7 +8,7 @@ Para llegar ahí hubo que portar a Go el descubrimiento de versiones público, q
 Nova necesita, y dar a Go su credencial de servicio en el proyecto `service`.
 Las pruebas offline están en `tests/unit/test_glance_suite.py`. Antes de esto,
 el repositorio no conservaba evidencia de un boot desde Glance Go (ver
-[preflight v2](../../evidence/sprint5/benchmarks/glance-v2-functional-preflight-20261031/README.md)).
+preflight v2).
 
 **Modo conjunto (2026-11-18):** con `--with-placement-go` la misma suite sustituye
 también Placement, así que Nova programa y reclama con Placement Go y arranca
