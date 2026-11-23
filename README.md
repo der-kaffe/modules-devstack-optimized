@@ -1,6 +1,6 @@
 # modules-devstack-optimized
 
-Reimplementación en Go de dos servicios de OpenStack, **Glance** (imágenes) y **Placement** (inventario de recursos), compatibles con los originales en Python. Trabajo de Título INFO-1197, Universidad Católica de Temuco.
+Reimplementación en Go de dos servicios de OpenStack, **Glance** (imágenes) y **Placement** (inventario de recursos), compatibles con los originales en Python.
 
 ## Resumen
 
