@@ -38,6 +38,7 @@ func destroySteps() []sqlStep {
 	return []sqlStep{
 		query("SELECT id FROM image_locations WHERE image_id=?", int64(7)),
 		execute("UPDATE image_locations SET deleted=1, deleted_at=?, updated_at=?, status='deleted' WHERE id=? AND deleted=0"),
+		{query: "SELECT id FROM image_members WHERE image_id=? AND deleted=0"}, // no members
 		execute("UPDATE image_properties SET deleted=1, deleted_at=?, updated_at=? WHERE image_id=? AND deleted=0"),
 		execute("UPDATE image_tags SET deleted=1, deleted_at=?, updated_at=? WHERE image_id=? AND deleted=0"),
 	}

@@ -1,0 +1,25 @@
+{
+ "cases": 450,
+ "differences": 1,
+ "diffs": [
+  {
+   "case": "prop invalid",
+   "go": [
+    400,
+    {
+     "code": "400 Bad Request",
+     "message": "Provided object does not match schema 'property': 'title' is a required property<br /><br />\n\n\n",
+     "title": "Bad Request"
+    }
+   ],
+   "original": [
+    400,
+    {
+     "code": "400 Bad Request",
+     "message": "Provided object does not match schema 'property': 'title' is a required property\n\nFailed validating 'required' in schema:\n    {'name': 'property',\n     'properties': {'name': {'type': 'string', 'maxLength': 80},\n                    'title': {'type': 'string'},\n                    'description': {'type': 'string'},\n                    'operators': {'type': 'array',\n                                  'items': {'type': 'string'}},\n                    'type': {'type': 'string',\n                             'enum': ['array',\n                                      'boolean',\n                                      'integer',\n                                      'number',\n                                      'object',\n                                      'string',\n                                      None]},\n                    'required': {'$ref': '#/definitions/stringArray'},\n                    'minimum': {'type': 'number'},\n                    'maximum': {'type': 'number'},\n                    'maxLength': {'$ref': '#/definitions/positiveInteger'},\n                    'minLength': {'$ref': '#/definitions/positiveIntegerDefault0'},\n                    'pattern': {'type': 'string', 'format': 'regex'},\n                    'enum': {'type': 'array'},\n                    'readonly': {'type': 'boolean'},\n                    'default': {},\n                    'items': {'type': 'object',\n                              'properties': {'type': {'type': 'string',\n                                                      'enum': ['array',\n                                                               'boolean',\n                                                               'integer',\n                                                               'number',\n                                                               'object',\n                                                               'string',\n                                                               None]},\n                                             'enum': {'type': 'array'}}},\n                    'maxItems': {'$ref': '#/definitions/positiveInteger'},\n                    'minItems': {'$ref': '#/definitions/positiveIntegerDefault0'},\n                    'uniqueItems': {'type': 'boolean', 'default': False},\n                    'additionalItems': {'type': 'boolean'}},\n     'additionalProperties': False,\n     'definitions': {'positiveInteger': {'type': 'integer', 'minimum': 0},\n                     'positiveIntegerDefault0': {'allOf': [{'$ref': '#/definitions/positiveInteger'},\n                                                           {'default': 0}]},\n                     'stringArray': {'type': 'array',\n                                     'items': {'type': 'string'},\n                                     'minItems': 1,\n                                     'uniqueItems': True}},\n     'required': ['type', 'title', 'name']}\n\nOn instance:\n    {'name': 'p3', 'type': 'boolean'}<br /><br />\n\n\n",
+     "title": "Bad Request"
+    }
+   ]
+  }
+ ]
+}

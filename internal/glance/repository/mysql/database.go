@@ -33,12 +33,16 @@ func Shared(name string) bool { return name == SharedDatabase || sharedTestDatab
 // from its glance-api.conf) on the bookkeeping database: the same account the
 // original uses, never a new privileged one.
 func parseDSN(value string) (*driver.Config, error) {
+	return parseDSNFor(value, AllowedDatabase, "MySQL database must be glance_go_shared or glance_go_shared_test_<suffix>")
+}
+
+func parseDSNFor(value string, allowed func(string) bool, refusal string) (*driver.Config, error) {
 	c, err := driver.ParseDSN(value)
 	if err != nil {
 		return nil, errors.New("invalid MySQL DSN")
 	}
-	if !AllowedDatabase(c.DBName) {
-		return nil, errors.New("MySQL database must be glance_go_shared or glance_go_shared_test_<suffix>")
+	if !allowed(c.DBName) {
+		return nil, errors.New(refusal)
 	}
 	if c.User == "" {
 		return nil, errors.New("a database account is required")
@@ -97,6 +101,22 @@ func Open(dsn string) (*sql.DB, error) {
 	if err != nil {
 		return nil, err
 	}
+	return openConfig(c)
+}
+
+// OpenCatalog opens the catalog database itself for the command-line tools
+// (glance-manage, cache tools, scrubber), with the same connection rules.
+func OpenCatalog(dsn string) (*sql.DB, error) {
+	c, err := parseDSNFor(dsn, func(name string) bool { return catalogName.MatchString(name) }, "invalid catalog database name")
+	if err != nil {
+		return nil, err
+	}
+	return openConfig(c)
+}
+
+var catalogName = regexp.MustCompile(`^[A-Za-z0-9_]{1,64}$`)
+
+func openConfig(c *driver.Config) (*sql.DB, error) {
 	connector, err := driver.NewConnector(c)
 	if err != nil {
 		return nil, errors.New("invalid MySQL connector configuration")

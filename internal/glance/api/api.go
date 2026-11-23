@@ -11,6 +11,8 @@ import (
 	"mime"
 	"net/http"
 	"net/url"
+	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -25,7 +27,12 @@ import (
 
 type identityKey struct{}
 
+// HealthcheckDisableFile is the original's disable_by_file_path.
+var HealthcheckDisableFile = "/etc/glance/healthcheck_disable"
+
 type Handler struct {
+	storeList    []StoreInfo
+	multi        MultiStore
 	service      *service.Service
 	auth         auth.Authenticator
 	publicURL    *url.URL
@@ -33,6 +40,10 @@ type Handler struct {
 	logger       *slog.Logger
 	challenge    string
 	binary       BinaryTransfers
+	imports      *service.Importer
+	cache        *service.ImageCache
+	// show_image_direct_url, show_multiple_locations
+	directURL, multipleLocations bool
 }
 
 func New(service *service.Service, authenticator auth.Authenticator, publicURL, keystoneURL string, maxBodyBytes int64, logger *slog.Logger, options ...Option) (http.Handler, error) {
@@ -62,6 +73,35 @@ func New(service *service.Service, authenticator auth.Authenticator, publicURL, 
 	mux.HandleFunc("/v2/images", h.create)
 	mux.HandleFunc("/v2/images/{id}", h.show)
 	mux.HandleFunc("/v2/schemas/{name}", h.schema)
+	mux.HandleFunc("/v2/schemas/{group}/{name}", h.schema)
+	mux.HandleFunc("/v2/images/{id}/members", h.members)
+	mux.HandleFunc("/v2/images/{id}/members/{member}", h.imageMember)
+	mux.HandleFunc("/v2/images/{id}/tags/{tag}", h.tag)
+	mux.HandleFunc("/v2/images/{id}/actions/{action}", h.action)
+	mux.HandleFunc("/v2/images/{id}/locations", h.locations)
+	mux.HandleFunc("/v2/images/{id}/stage", h.stage)
+	mux.HandleFunc("/v2/images/{id}/import", h.importImage)
+	mux.HandleFunc("/v2/images/{id}/tasks", h.imageTasks)
+	mux.HandleFunc("/v2/info/import", h.importInfo)
+	mux.HandleFunc("/v2/tasks", h.tasksList)
+	mux.HandleFunc("/v2/tasks/{task}", h.task)
+	mux.HandleFunc("/v2/metadefs/namespaces", h.namespaces)
+	mux.HandleFunc("/v2/metadefs/namespaces/{ns}", h.namespace)
+	mux.HandleFunc("/v2/metadefs/namespaces/{ns}/objects", h.metadefObjects)
+	mux.HandleFunc("/v2/metadefs/namespaces/{ns}/objects/{name}", h.metadefObject)
+	mux.HandleFunc("/v2/metadefs/namespaces/{ns}/properties", h.metadefProperties)
+	mux.HandleFunc("/v2/metadefs/namespaces/{ns}/properties/{name}", h.metadefProperty)
+	mux.HandleFunc("/v2/metadefs/namespaces/{ns}/tags", h.metadefTags)
+	mux.HandleFunc("/v2/metadefs/namespaces/{ns}/tags/{name}", h.metadefTag)
+	mux.HandleFunc("/v2/metadefs/namespaces/{ns}/resource_types", h.namespaceResourceTypes)
+	mux.HandleFunc("/v2/metadefs/namespaces/{ns}/resource_types/{name}", h.namespaceResourceType)
+	mux.HandleFunc("/v2/metadefs/resource_types", h.resourceTypes)
+	mux.HandleFunc("/v2/cache", h.cacheList)
+	mux.HandleFunc("/v2/cache/{image}", h.cacheImage)
+	mux.HandleFunc("/v2/info/usage", h.usage)
+	mux.HandleFunc("/v2/info/stores", h.stores)
+	mux.HandleFunc("/v2/info/stores/detail", h.stores)
+	mux.HandleFunc("/v2/stores/{store}/{id}", h.deleteFromStore)
 	if h.binary != nil {
 		mux.HandleFunc("/v2/images/{id}/file", h.file)
 	}
@@ -109,6 +149,23 @@ func New(service *service.Service, authenticator auth.Authenticator, publicURL, 
 			}
 			h.logger.Log(r.Context(), level, "request completed", "request_id", requestID, "method", method, "route", logRoute(r.URL.Path), "status", observed.status, "duration_ms", time.Since(start).Milliseconds(), "response_bytes", observed.bytes, "error_kind", observed.kind)
 		}()
+		// /healthcheck is public, as the original's paste pipeline
+		// (oslo.middleware healthcheck with the disable_by_file backend).
+		if r.URL.Path == "/healthcheck" && (r.Method == http.MethodGet || r.Method == http.MethodHead) {
+			w.Header().Set("Content-Type", "text/plain; charset=UTF-8")
+			if _, err := os.Stat(HealthcheckDisableFile); err == nil {
+				w.WriteHeader(http.StatusServiceUnavailable)
+				if r.Method == http.MethodGet {
+					_, _ = io.WriteString(w, "DISABLED BY FILE")
+				}
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			if r.Method == http.MethodGet {
+				_, _ = io.WriteString(w, "OK")
+			}
+			return
+		}
 		// Version discovery is public in the original (no authtoken in its
 		// pipeline); keystoneauth in Nova requests it before any image call.
 		if status, ok := discovery(r); ok {
@@ -144,17 +201,28 @@ func New(service *service.Service, authenticator auth.Authenticator, publicURL, 
 			h.failure(w, err)
 			return
 		}
-		mux.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), identityKey{}, identity)))
+		ctx := withRequestID(context.WithValue(r.Context(), identityKey{}, identity), requestID)
+		mux.ServeHTTP(w, r.WithContext(ctx))
 	}), nil
+}
+
+// withRequestID gives the service the request's ID (a task's request_id).
+func withRequestID(ctx context.Context, id string) context.Context {
+	return context.WithValue(ctx, service.RequestIDKey{}, id)
 }
 
 // Log route templates rather than arbitrary paths, identifiers or queries.
 func logRoute(path string) string {
-	if path == "/v2/images" || path == "/" || path == "/versions" {
+	if path == "/v2/images" || path == "/" || path == "/versions" || path == "/v2/info/usage" || path == "/v2/info/stores" || path == "/v2/info/stores/detail" || path == "/v2/info/import" || path == "/v2/tasks" || path == "/v2/cache" || path == "/v2/metadefs/namespaces" || path == "/v2/metadefs/resource_types" || path == "/healthcheck" {
 		return path
 	}
-	if rest, ok := strings.CutPrefix(path, "/v2/schemas/"); ok && rest != "" && !strings.Contains(rest, "/") {
-		return "/v2/schemas/{name}"
+	if rest, ok := strings.CutPrefix(path, "/v2/schemas/"); ok && rest != "" {
+		if strings.HasPrefix(rest, "metadefs/") && strings.Count(rest, "/") == 1 {
+			return "/v2/schemas/metadefs/{name}"
+		}
+		if !strings.Contains(rest, "/") {
+			return "/v2/schemas/{name}"
+		}
 	}
 	if rest, ok := strings.CutPrefix(path, "/v2/images/"); ok && strings.HasSuffix(rest, "/file") {
 		id := strings.TrimSuffix(rest, "/file")
@@ -164,6 +232,40 @@ func logRoute(path string) string {
 	}
 	if rest, ok := strings.CutPrefix(path, "/v2/images/"); ok && rest != "" && !strings.Contains(rest, "/") {
 		return "/v2/images/{id}"
+	}
+	if rest, ok := strings.CutPrefix(path, "/v2/images/"); ok {
+		parts := strings.Split(rest, "/")
+		if parts[0] != "" {
+			switch {
+			case len(parts) == 2 && parts[1] == "members":
+				return "/v2/images/{id}/members"
+			case len(parts) == 3 && parts[1] == "members" && parts[2] != "":
+				return "/v2/images/{id}/members/{member}"
+			case len(parts) == 3 && parts[1] == "tags" && parts[2] != "":
+				return "/v2/images/{id}/tags/{tag}"
+			case len(parts) == 2 && (parts[1] == "stage" || parts[1] == "import" || parts[1] == "tasks" || parts[1] == "locations"):
+				return "/v2/images/{id}/" + parts[1]
+			case len(parts) == 3 && parts[1] == "actions" && (parts[2] == "deactivate" || parts[2] == "reactivate"):
+				return "/v2/images/{id}/actions/" + parts[2]
+			}
+		}
+	}
+	if rest, ok := strings.CutPrefix(path, "/v2/tasks/"); ok && rest != "" && !strings.Contains(rest, "/") {
+		return "/v2/tasks/{id}"
+	}
+	if rest, ok := strings.CutPrefix(path, "/v2/cache/"); ok && rest != "" && !strings.Contains(rest, "/") {
+		return "/v2/cache/{image_id}"
+	}
+	if rest, ok := strings.CutPrefix(path, "/v2/metadefs/namespaces/"); ok && rest != "" {
+		parts := strings.Split(rest, "/")
+		switch {
+		case len(parts) == 1:
+			return "/v2/metadefs/namespaces/{ns}"
+		case len(parts) == 2 && slices.Contains([]string{"objects", "properties", "tags", "resource_types"}, parts[1]):
+			return "/v2/metadefs/namespaces/{ns}/" + parts[1]
+		case len(parts) == 3 && parts[2] != "" && slices.Contains([]string{"objects", "properties", "tags", "resource_types"}, parts[1]):
+			return "/v2/metadefs/namespaces/{ns}/" + parts[1] + "/{name}"
+		}
 	}
 	return "unmatched"
 }
@@ -283,6 +385,19 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Location", h.publicURL.JoinPath("v2", "images", image.ID).String())
+	// As the original's ResponseSerializer.create.
+	if h.imports != nil {
+		if methods := h.imports.Methods(); len(methods) > 0 {
+			w.Header().Set("OpenStack-image-import-methods", strings.Join(methods, ","))
+		}
+	}
+	if len(h.storeList) > 0 {
+		ids := make([]string, 0, len(h.storeList))
+		for _, st := range h.storeList {
+			ids = append(ids, st.ID)
+		}
+		w.Header().Set("OpenStack-image-store-ids", strings.Join(ids, ","))
+	}
 	h.json(w, 201, representation(image))
 }
 
@@ -305,7 +420,9 @@ func (h *Handler) show(w http.ResponseWriter, r *http.Request) {
 		h.failure(w, err)
 		return
 	}
-	h.json(w, 200, representation(image))
+	rep := representation(image)
+	h.decorate(r, rep)
+	h.json(w, 200, rep)
 }
 
 func (h *Handler) json(w http.ResponseWriter, status int, value any) {
@@ -334,7 +451,7 @@ func (h *Handler) failure(w http.ResponseWriter, err error) {
 		}
 		h.status(w, 503, "Identity validation unavailable.")
 	case errors.As(err, &domain):
-		status := map[model.Kind]int{model.Invalid: 400, model.Forbidden: 403, model.NotFound: 404, model.Conflict: 409, model.LimitExceeded: 413}[domain.Kind]
+		status := map[model.Kind]int{model.Invalid: 400, model.Forbidden: 403, model.NotFound: 404, model.Conflict: 409, model.LimitExceeded: 413, model.Unsupported: 415}[domain.Kind]
 		if status == 0 {
 			status = 500
 		}
@@ -352,7 +469,9 @@ func (h *Handler) failure(w http.ResponseWriter, err error) {
 func representation(image model.Image) map[string]any {
 	out := map[string]any{}
 	for key, value := range image.Properties {
-		if !model.Reserved(key) {
+		// os_glance_* are the original's own properties (import lock, stage
+		// host): shown, though clients cannot set them.
+		if (!model.Reserved(key) || strings.HasPrefix(key, "os_glance")) && key != "os_glance_stage_host" && key != "os_glance_hash_op_host" {
 			out[key] = value
 		}
 	}

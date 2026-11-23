@@ -56,7 +56,40 @@ func prepareBinary(ctx context.Context, c config.Config, r binaryRepository, sco
 	if err != nil {
 		return nil, errors.New("cannot acquire initialized exclusive store")
 	}
-	owner, err := service.NewUploadCoordinator(r, r, fs, service.UploadLimits{MaxBytes: c.Binary.MaxUploadBytes, MaxConcurrent: c.Binary.MaxConcurrent, MaxDownloadStreams: c.Binary.MaxDownloadStreams, ResolutionTimeout: c.Binary.ResolutionTimeout, RecoveryTimeout: c.Binary.RecoveryTimeout})
+	if rd, ok := r.(interface{ SetDelayedDelete(bool) }); ok {
+		rd.SetDelayedDelete(c.DelayedDelete)
+	}
+	// Multi-store: the other enabled_backends' directories, in the store and
+	// in the repository's locations, before recovery reads them.
+	var names []string
+	if len(c.Backends) > 0 {
+		fsys, ok := fs.(*store.Filesystem)
+		if !ok {
+			_ = fs.Close()
+			return nil, errors.New("multi-store needs the filesystem store")
+		}
+		dirs := map[string]string{}
+		for _, b := range c.Backends {
+			dirs[b.Name], names = b.Dir, append(names, b.Name)
+			if b.Name != c.DefaultBackend {
+				if err = fsys.AddBackend(b.Name, b.Dir); err != nil {
+					_ = fs.Close()
+					return nil, errors.New("cannot open store " + b.Name)
+				}
+			}
+		}
+		if rb, ok := r.(interface {
+			SetBackends(string, map[string]string)
+		}); ok {
+			rb.SetBackends(c.DefaultBackend, dirs)
+		}
+	}
+	owner, err := service.NewUploadCoordinator(r, r, fs, service.UploadLimits{MaxBytes: c.Binary.MaxUploadBytes, MaxConcurrent: c.Binary.MaxConcurrent, MaxDownloadStreams: c.Binary.MaxDownloadStreams, ResolutionTimeout: c.Binary.ResolutionTimeout, RecoveryTimeout: c.Binary.RecoveryTimeout,
+		Inspect: true, RequireFormat: c.ImageFormat.RequireMatch, GPTNonfatalCheck: c.ImageFormat.GPTNonfatal,
+		StorageQuota: c.UserStorageQuota})
+	if err == nil && len(names) > 0 {
+		owner.SetBackends(c.DefaultBackend, names)
+	}
 	if err != nil {
 		_ = fs.Close()
 		return nil, errors.New("cannot construct transfer owner")

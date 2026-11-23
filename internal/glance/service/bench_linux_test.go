@@ -17,7 +17,12 @@ import (
 // Whole service upload (Stage, Publish, post-publish check and SQL
 // checkpoints) on the real filesystem store; SQL is the in-memory double.
 // Developer-host measurement, not a campaign.
-func BenchmarkServiceUpload64MiBRealStore(b *testing.B) {
+func BenchmarkServiceUpload64MiBRealStore(b *testing.B) { benchmarkServiceUpload(b, false) }
+
+// The same with [image_format] inspection, as DevStack runs it.
+func BenchmarkServiceUpload64MiBInspected(b *testing.B) { benchmarkServiceUpload(b, true) }
+
+func benchmarkServiceUpload(b *testing.B, inspect bool) {
 	root := b.TempDir()
 	if err := os.Chmod(root, 0700); err != nil {
 		b.Fatal(err)
@@ -47,7 +52,7 @@ func BenchmarkServiceUpload64MiBRealStore(b *testing.B) {
 		log.mu.Unlock()
 	}
 	fresh()
-	u, err := NewUploadCoordinator(uploadCatalogDouble{sql: sql}, sql, fs, UploadLimits{MaxBytes: 1 << 30, MaxConcurrent: 2, ResolutionTimeout: time.Minute, RecoveryTimeout: time.Minute})
+	u, err := NewUploadCoordinator(uploadCatalogDouble{sql: sql}, sql, fs, UploadLimits{MaxBytes: 1 << 30, MaxConcurrent: 2, ResolutionTimeout: time.Minute, RecoveryTimeout: time.Minute, Inspect: inspect, RequireFormat: inspect})
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -57,6 +62,7 @@ func BenchmarkServiceUpload64MiBRealStore(b *testing.B) {
 	}
 	data := bytes.Repeat([]byte("glance-go-bench-"), (64<<20)/16)
 	b.SetBytes(int64(len(data)))
+	b.ReportAllocs()
 	for b.Loop() {
 		b.StopTimer()
 		fresh()

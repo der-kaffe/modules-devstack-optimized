@@ -22,7 +22,13 @@ ORIGINAL_UNIT = 'devstack@g-api.service'
 def replacement(port):
     if type(port) is not int or not 1024 <= port <= 65535:
         raise ValueError('controlled loopback backend port required')
-    return (f'ProxyPass "/image" "http://127.0.0.1:{port}" retry=0 acquire=1\n'
+    # The same Apache settings as the original's site (KeepAlive Off, chunked
+    # requests to the backend): without them Go behind Apache was the only
+    # route that reused client connections, and a 16-client burst could hit a
+    # connection Apache then closed (RemoteDisconnected on the first POST).
+    return ('KeepAlive Off\n'
+            'SetEnv proxy-sendchunked 1\n'
+            f'ProxyPass "/image" "http://127.0.0.1:{port}" retry=0 acquire=1\n'
             f'ProxyPassReverse "/image" "http://127.0.0.1:{port}"\n').encode()
 
 

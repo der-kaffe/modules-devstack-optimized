@@ -33,7 +33,25 @@ def windows(p, pilot=False):
     return len(p['scenarios']) * len(p['concurrency']) * 2 * (1 if pilot else p['repetitions'])
 
 
+V7_SCENARIOS = SCENARIOS + ['import-direct-16m', 'upload-qcow2', 'nova-mix']
+
+
 def validate_protocol(p):
+    if p['protocol'] == 'glance-v7':
+        # v7: the design of the Placement campaign (C=1/16, 3 pairs, no pilot)
+        # under the v6 conditions, plus three Glance loads.
+        if ([s['id'] for s in p['scenarios']] != V7_SCENARIOS or p['concurrency'] != [1, 16] or p['repetitions'] != 3
+                or p['warmup_s'] != 10 or p['measurement_s'] != 30 or p['catalog_seed_count'] != 100
+                or p['required_official_windows'] != windows(p) or windows(p) != 144 or p.get('pilot') is not None
+                or p['payload_sizes_bytes'] != [1048576, 16777216, 67108864] or p.get('route') != 'public-both'
+                or p.get('go_catalog') != 'official' or p.get('notification_policy') != 'noop' or p.get('go_notification_policy') != 'noop'
+                or p['metadata_request_timeout_s'] != 120 or p['binary_request_timeout_s'] != 120
+                or not 0 < p.get('import_poll_pause_s', 0) <= 1):
+            raise ValueError('unsupported or incomplete frozen Glance v7 matrix')
+        for item in p['scenarios']:
+            if item['id'] in ('import-direct-16m', 'nova-mix') and item['size_bytes'] != 16777216:
+                raise ValueError('scenario payload size disagreement')
+        return windows(p)
     if p['protocol'] == 'glance-compact-v6':
         # v6: v5 matrix and route, under the same conditions for both: Glance Go
         # serves the original's catalog, MySQL server and store (as the permanent
@@ -155,6 +173,18 @@ def run(args):
     save(args.output / 'manifest.json', manifest)
     payloads = {size: (args.private_root / f'payload-{size}.bin') for size in p['payload_sizes_bytes']}
     hashes = {size: payload(path, size) for size, path in payloads.items()}
+    if any(s['id'] == 'upload-qcow2' for s in p['scenarios']):
+        # A real qcow2 (the 16 MiB payload converted on the host): format
+        # inspection and virtual_size on both implementations.
+        qcow2 = args.private_root / 'payload-qcow2.qcow2'
+        subprocess.run(['qemu-img', 'convert', '-q', '-f', 'raw', '-O', 'qcow2', str(payloads[16777216]), str(qcow2)], check=True)
+        digests = {name: hashlib.new(name) for name in ('sha256', 'sha512', 'md5')}
+        with qcow2.open('rb') as stream:
+            for block in iter(lambda: stream.read(1 << 20), b''):
+                for d in digests.values():
+                    d.update(block)
+        payloads['qcow2'] = qcow2
+        hashes['qcow2'] = {'size': qcow2.stat().st_size, 'virtual_size': 16777216, **{k: d.hexdigest() for k, d in digests.items()}}
     remote = Remote(args)
     try:
         save(args.output / 'environment.json', remote.call('prepare'))
@@ -183,6 +213,9 @@ def run(args):
                     if config['payload'] != hashes[size]:
                         raise ValueError('host/VM payload hashes differ')
                     config['payload_file'] = str(payloads[size])
+                elif pair['scenario'] == 'upload-qcow2':
+                    config['payload'], config['payload_file'] = hashes['qcow2'], str(payloads['qcow2'])
+                config['import_poll_pause_s'] = p.get('import_poll_pause_s')
                 # Client timeouts come from the frozen protocol (v4 and earlier: 10 s / 120 s).
                 config['metadata_timeout_s'] = p['metadata_request_timeout_s']
                 config['binary_timeout_s'] = p['binary_request_timeout_s']

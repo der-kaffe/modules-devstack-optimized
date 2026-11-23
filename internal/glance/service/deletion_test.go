@@ -152,9 +152,12 @@ func TestDeleteImageDurableOrderAndPreservedMetadata(t *testing.T) {
 			if err := u.DeleteImage(context.Background(), identity("member"), uploadImageID); err != nil {
 				t.Fatal(err)
 			}
+			// After an acknowledged tombstone: the resolution read, one read before
+			// the unlink and the conditional cleanup transition. Nothing is read
+			// back after the unlink or the cleanup commit.
 			want := []string{"catalog.Get", "sql.State", "sql.Tombstone", "sql.State"}
 			if phase != "" {
-				want = append(want, "sql.State", "fs.Delete", "sql.State", "sql.CompleteCleanup", "sql.State")
+				want = append(want, "sql.State", "fs.Delete", "sql.CompleteCleanup")
 			}
 			if !reflect.DeepEqual(log.snapshot(), want) {
 				t.Fatal(log.snapshot())
@@ -278,9 +281,13 @@ func TestDeleteImageUncertainCommitsAndFailures(t *testing.T) {
 				d.failReadAt[2] = true
 			case "read-before-unlink":
 				d.failReadAt[3] = true
+			// The reads after the unlink and after the cleanup commit exist
+			// only for an uncertain tombstone.
 			case "read-after-unlink":
+				d.faults["Tombstone"] = uploadSQLFault{err: repository.ErrCommitUncertain, applied: true}
 				d.failReadAt[4] = true
 			case "read-final":
+				d.faults["Tombstone"] = uploadSQLFault{err: repository.ErrCommitUncertain, applied: true}
 				d.failReadAt[5] = true
 			case "delete-failed":
 				fs.faults["Delete"] = uploadStoreFault{err: errors.New("private filesystem")}

@@ -122,3 +122,39 @@ func Envelope(publisherID, eventType, priority string, payload any, now time.Tim
 	}
 	return json.Marshal(map[string]string{"oslo.version": "2.0", "oslo.message": string(message)})
 }
+
+// MemberPayload is the original's format_image_member_notification
+// (image.member.create/update/delete).
+func MemberPayload(m model.Member, deleted bool, at time.Time) map[string]any {
+	p := map[string]any{"image_id": m.ImageID, "member_id": m.MemberID, "status": m.Status,
+		"created_at": isotime(m.CreatedAt), "updated_at": isotime(m.UpdatedAt), "deleted": deleted, "deleted_at": nil}
+	if deleted {
+		p["deleted_at"] = isotime(at)
+	}
+	return p
+}
+
+// TaskPayload is the original's format_task_notification (task.create,
+// task.processing, task.success, task.failure): no input, result or message.
+func TaskPayload(t model.Task) map[string]any {
+	var expires any
+	if t.ExpiresAt != nil {
+		expires = isotime(*t.ExpiresAt)
+	}
+	return map[string]any{"id": t.ID, "type": t.Type, "status": t.Status, "result": nil, "owner": t.Owner, "message": nil,
+		"expires_at": expires, "created_at": isotime(t.CreatedAt), "updated_at": isotime(t.UpdatedAt), "deleted": false, "deleted_at": nil}
+}
+
+// NamespacePayload is the original's format_metadef_namespace_notification.
+func NamespacePayload(n model.Namespace, oldName string) map[string]any {
+	var updated any
+	if n.UpdatedAt != nil {
+		updated = isotime(*n.UpdatedAt)
+	}
+	if oldName == "" {
+		oldName = n.Namespace
+	}
+	return map[string]any{"namespace": n.Namespace, "namespace_old": oldName, "display_name": n.DisplayName, "protected": n.Protected,
+		"visibility": n.Visibility, "owner": n.Owner, "description": n.Description, "created_at": isotime(n.CreatedAt), "updated_at": updated,
+		"deleted": false, "deleted_at": nil}
+}

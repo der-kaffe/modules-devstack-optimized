@@ -3,11 +3,14 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
+	"strconv"
 	"sync"
 	"time"
 
 	"github.com/PaoloCastanon/modules-devstack-optimized/internal/auth"
+	"github.com/PaoloCastanon/modules-devstack-optimized/internal/glance/format"
 	"github.com/PaoloCastanon/modules-devstack-optimized/internal/glance/model"
 	"github.com/PaoloCastanon/modules-devstack-optimized/internal/glance/notify"
 	"github.com/PaoloCastanon/modules-devstack-optimized/internal/glance/repository"
@@ -16,10 +19,12 @@ import (
 )
 
 var (
-	ErrUploadNotReady       = errors.New("upload coordinator is not accepting transfers")
-	ErrUploadBusy           = errors.New("upload capacity or image is busy")
-	ErrUploadUnavailable    = errors.New("upload dependency unavailable")
-	ErrUploadInterrupted    = errors.New("upload source interrupted")
+	ErrUploadNotReady    = errors.New("upload coordinator is not accepting transfers")
+	ErrUploadBusy        = errors.New("upload capacity or image is busy")
+	ErrUploadUnavailable = errors.New("upload dependency unavailable")
+	ErrUploadInterrupted = errors.New("upload source interrupted")
+	// errStorageQuotaFull: the limiting reader passed user_storage_quota.
+	errStorageQuotaFull     = errors.New("storage quota full")
 	ErrUploadGone           = errors.New("upload lost to an image tombstone")
 	ErrUploadReconciliation = errors.New("upload state requires reconciliation; evidence retained")
 )
@@ -34,6 +39,12 @@ type UploadLimits struct {
 	MaxDownloadStreams int
 	ResolutionTimeout  time.Duration
 	RecoveryTimeout    time.Duration
+	// Inspect: [image_format] content inspection of bare uploads.
+	Inspect          bool
+	RequireFormat    bool
+	GPTNonfatalCheck []string
+	// StorageQuota is user_storage_quota in bytes (0: none).
+	StorageQuota int64
 }
 
 type ImageReader interface {
@@ -46,6 +57,11 @@ type ImageReader interface {
 type UploadCoordinator struct {
 	images                    ImageReader
 	transfers                 repository.Transfers
+	quota                     QuotaEnforcer
+	defaultBackend            string
+	backends                  map[string]bool
+	backendOrder              []string // enabled_backends order
+	cache                     *ImageCache
 	bytes                     store.Store
 	limits                    UploadLimits
 	now                       func() time.Time
@@ -112,7 +128,7 @@ func (u *UploadCoordinator) claim(id string) (func(), error) {
 }
 
 func uploadStorageError(err error) error {
-	for _, known := range []error{context.Canceled, context.DeadlineExceeded, ErrUploadInterrupted, store.ErrTooLarge, store.ErrSizeMismatch, store.ErrStoreFull, store.ErrIntegrity, store.ErrExists} {
+	for _, known := range []error{context.Canceled, context.DeadlineExceeded, ErrUploadInterrupted, errStorageQuotaFull, store.ErrTooLarge, store.ErrSizeMismatch, store.ErrStoreFull, store.ErrIntegrity, store.ErrExists} {
 		if errors.Is(err, known) {
 			return known
 		}
@@ -130,7 +146,7 @@ func (s uploadSource) Read(p []byte) (int, error) {
 	if err == nil || err == io.EOF {
 		return n, err
 	}
-	for _, known := range []error{context.Canceled, context.DeadlineExceeded, store.ErrTooLarge, store.ErrSizeMismatch} {
+	for _, known := range []error{context.Canceled, context.DeadlineExceeded, store.ErrTooLarge, store.ErrSizeMismatch, errStorageQuotaFull} {
 		if errors.Is(err, known) {
 			return n, known
 		}
@@ -204,7 +220,8 @@ func (u *UploadCoordinator) readState(ctx context.Context, id string) (model.Dat
 	return checkedState(s, err, id)
 }
 func checkedState(s model.DataState, err error, id string) (model.DataState, error) {
-	if err != nil || s.ImageID != id || s.Deleted != (s.Status == "deleted") {
+	// A deleted row is "deleted", or "pending_delete" with delayed_delete.
+	if err != nil || s.ImageID != id || s.Deleted != (s.Status == "deleted" || s.Status == "pending_delete") {
 		return model.DataState{}, ErrUploadReconciliation
 	}
 	if s.Operation != nil && (s.Operation.ImageID != id || s.Operation.Validate() != nil) {
@@ -228,7 +245,7 @@ func imageReceiptMatches(s model.DataState, c model.DataContent) bool {
 	return s.Size != nil && *s.Size == c.Size && sameNumber(s.VirtualSize, c.VirtualSize) && sameText(s.Checksum, c.Checksum) && sameText(s.HashAlgorithm, "sha512") && sameText(s.HashValue, c.SHA512)
 }
 func committed(s model.DataState, key store.Key, c model.DataContent) bool {
-	return ownState(s, key) == nil && s.Status == "active" && s.Operation.Phase == model.DataCommitted && receiptMatches(s.Operation, c) && imageReceiptMatches(s, c)
+	return ownState(s, key) == nil && (s.Status == "active" || s.Status == "deactivated") && s.Operation.Phase == model.DataCommitted && receiptMatches(s.Operation, c) && imageReceiptMatches(s, c)
 }
 func committedBeforeTombstone(s model.DataState, key store.Key, c model.DataContent) bool {
 	if !s.Deleted || s.Operation == nil || s.Operation.AttemptID != key.AttemptID || !receiptMatches(s.Operation, c) || !imageReceiptMatches(s, c) {
@@ -252,6 +269,12 @@ type dataFinisher interface {
 func (u *UploadCoordinator) checkpoint(ctx context.Context, key store.Key, phase model.DataPhase, c *model.DataContent, writeErr error) error {
 	if writeErr != nil && !errors.Is(writeErr, repository.ErrCommitUncertain) {
 		return uploadDBError(writeErr, key.ImageID)
+	}
+	// An acknowledged write is its own proof: each transition is one
+	// conditional UPDATE whose affected rows were checked, so only an
+	// uncertain commit is read back to learn what happened.
+	if writeErr == nil {
+		return nil
 	}
 	resolved, cancel := u.resolution(ctx)
 	defer cancel()
@@ -288,11 +311,13 @@ func (u *UploadCoordinator) checkpoint(ctx context.Context, key store.Key, phase
 	return ErrUploadReconciliation
 }
 
-func (u *UploadCoordinator) authorized(ctx context.Context, who auth.Identity, id string) (model.Image, error) {
+// authorized: task is the import holding the image's import lock ("" for a
+// client upload). A client upload never writes an image being imported.
+func (u *UploadCoordinator) authorized(ctx context.Context, who auth.Identity, id, task string) (model.Image, error) {
 	if err := who.Check(u.now()); err != nil {
 		return model.Image{}, err
 	}
-	if !who.HasRole("member") && !who.HasRole("admin") {
+	if !overridden() && !who.HasRole("member") && !who.HasRole("admin") {
 		return model.Image{}, model.Fail(model.Forbidden, "Uploading images requires member or admin role.")
 	}
 	i, err := u.images.Get(ctx, id)
@@ -302,8 +327,11 @@ func (u *UploadCoordinator) authorized(ctx context.Context, who auth.Identity, i
 	if i.ID != id {
 		return i, ErrUploadReconciliation
 	}
-	if err = writePolicy(who, i); err != nil {
+	if err = writePolicy(who, i, "upload_image"); err != nil {
 		return i, err
+	}
+	if i.Properties[model.ImportTaskProperty] != task {
+		return i, model.Fail(model.Conflict, "Image "+id+" is being imported.")
 	}
 	return i, nil
 }
@@ -334,8 +362,58 @@ func (u *UploadCoordinator) notify(eventType, priority string, payload any) {
 // image.activate and image.update (active), or an ERROR image.upload whose
 // payload is a message, as official Glance.
 func (u *UploadCoordinator) Upload(ctx context.Context, who auth.Identity, value string, src io.Reader, declared *int64) (model.DataContent, error) {
+	return u.write(ctx, who, value, src, declared, "", "")
+}
+
+// UploadTo is Upload into one of enabled_backends (X-Image-Meta-Store).
+func (u *UploadCoordinator) UploadTo(ctx context.Context, who auth.Identity, value string, src io.Reader, declared *int64, backend string) (model.DataContent, error) {
+	b, err := u.backendKey(backend)
+	if err != nil {
+		return model.DataContent{}, err
+	}
+	return u.write(ctx, who, value, src, declared, "", b)
+}
+
+// SetBackends enables multi-store: the default store's name and the others.
+func (u *UploadCoordinator) SetBackends(def string, names []string) {
+	u.defaultBackend, u.backends, u.backendOrder = def, map[string]bool{}, append([]string(nil), names...)
+	for _, n := range names {
+		u.backends[n] = true
+	}
+}
+
+// backendKey maps a store name to its store key ("" for the default).
+func (u *UploadCoordinator) backendKey(name string) (string, error) {
+	if name == "" || name == u.defaultBackend {
+		return "", nil
+	}
+	if !u.backends[name] {
+		return "", model.Fail(model.Invalid, "Unknown scheme '"+name+"' found in URI")
+	}
+	return name, nil
+}
+
+// ImportUpload writes an import's data (task holds the image's import lock)
+// through the same reserve/stage/publish/commit path as a client upload.
+func (u *UploadCoordinator) ImportUpload(ctx context.Context, who auth.Identity, id string, src io.Reader, declared *int64, task string) (model.DataContent, error) {
+	if task == "" {
+		return model.DataContent{}, model.Fail(model.Invalid, "Import without a task.")
+	}
+	return u.write(ctx, who, id, src, declared, task, "")
+}
+
+// ImportUploadTo is ImportUpload into a backend.
+func (u *UploadCoordinator) ImportUploadTo(ctx context.Context, who auth.Identity, id string, src io.Reader, declared *int64, task, backend string) (model.DataContent, error) {
+	b, err := u.backendKey(backend)
+	if err != nil {
+		return model.DataContent{}, err
+	}
+	return u.write(ctx, who, id, src, declared, task, b)
+}
+
+func (u *UploadCoordinator) write(ctx context.Context, who auth.Identity, value string, src io.Reader, declared *int64, task, backend string) (model.DataContent, error) {
 	var prepared *model.Image
-	content, err := u.upload(ctx, who, value, src, declared, &prepared)
+	content, err := u.upload(ctx, who, value, src, declared, &prepared, task, backend)
 	if prepared == nil {
 		return content, err
 	}
@@ -354,7 +432,7 @@ func (u *UploadCoordinator) Upload(ctx context.Context, who auth.Identity, value
 	return content, nil
 }
 
-func (u *UploadCoordinator) upload(ctx context.Context, who auth.Identity, value string, src io.Reader, declared *int64, prepared **model.Image) (model.DataContent, error) {
+func (u *UploadCoordinator) upload(ctx context.Context, who auth.Identity, value string, src io.Reader, declared *int64, prepared **model.Image, task, backend string) (model.DataContent, error) {
 	var zero model.DataContent
 	if err := ctx.Err(); err != nil {
 		return zero, err
@@ -363,12 +441,33 @@ func (u *UploadCoordinator) upload(ctx context.Context, who auth.Identity, value
 	if err != nil {
 		return zero, err
 	}
-	i, err := u.authorized(ctx, who, id)
+	i, err := u.authorized(ctx, who, id, task)
 	if err != nil {
 		return zero, err
 	}
+	if u.quota != nil && task == "" { // an import was checked when accepted
+		if err = u.quota.EnforceUpload(ctx, who.ProjectID); err != nil {
+			return zero, err
+		}
+	}
 	if src == nil || declared != nil && *declared < 0 {
 		return zero, model.Fail(model.Invalid, "Invalid upload source or declared size.")
+	}
+	// The original's user_storage_quota (check_quota + LimitingReader),
+	// only without Keystone limits.
+	if u.limits.StorageQuota > 0 && u.quota == nil {
+		remaining, err := u.storageRemaining(ctx, i.Owner)
+		if err != nil {
+			return zero, err
+		}
+		if declared != nil && *declared > remaining || declared == nil && remaining <= 0 {
+			size := "None"
+			if declared != nil {
+				size = strconv.FormatInt(*declared, 10)
+			}
+			return zero, storageQuotaFull(fmt.Sprintf("The size of the data %s will exceed the limit. %d bytes remaining.", size, remaining))
+		}
+		src = &quotaReader{r: src, left: remaining}
 	}
 	var expected *int64
 	if declared != nil {
@@ -409,7 +508,7 @@ func (u *UploadCoordinator) upload(ctx context.Context, who auth.Identity, value
 	if err != nil {
 		return zero, ErrUploadUnavailable
 	}
-	key := store.Key{ImageID: id, AttemptID: attempt.String()}
+	key := store.Key{ImageID: id, AttemptID: attempt.String(), Backend: backend}
 	_, reserveErr := u.transfers.ReserveData(ctx, id, key.AttemptID, expected, u.now())
 	if reserveErr != nil && !errors.Is(reserveErr, repository.ErrCommitUncertain) {
 		return zero, uploadDBError(reserveErr, id)
@@ -432,7 +531,7 @@ func (u *UploadCoordinator) upload(ctx context.Context, who auth.Identity, value
 	}
 	// Formats are mutable while queued. Re-read after reservation froze formats
 	// in saving; do not use a stale pre-reservation format to derive virtual_size.
-	current, err := u.authorized(ctx, who, id)
+	current, err := u.authorized(ctx, who, id, task)
 	if err != nil {
 		return fail(err)
 	}
@@ -445,19 +544,39 @@ func (u *UploadCoordinator) upload(ctx context.Context, who auth.Identity, value
 	*prepared = &current
 	u.notify("image.update", notify.Info, notify.ImagePayload(current))
 	u.notify("image.prepare", notify.Info, notify.UploadPayload(current))
+	// As the original's set_data: bare uploads are inspected in flight
+	// (format_inspector over the same stream the hashes and file read).
+	var inspector *format.Wrapper
+	if u.limits.Inspect && current.ContainerFormat != nil && *current.ContainerFormat == "bare" {
+		inspector = format.NewWrapper()
+		src = io.TeeReader(src, inspector)
+	}
 	info, err := u.bytes.Stage(ctx, key, uploadSource{src}, u.limits.MaxBytes, expected)
 	if err != nil {
 		if errors.Is(err, store.ErrExists) {
 			return zero, ErrUploadReconciliation
 		}
+		if errors.Is(err, errStorageQuotaFull) {
+			return fail(storageQuotaFull("The size of the data %(image_size)s will exceed the limit. %(remaining)s bytes remaining."))
+		}
 		return fail(uploadStorageError(err))
 	}
 	content := model.DataContent{Size: info.Size, Checksum: info.Checksum, SHA512: info.SHA512}
-	if *current.DiskFormat == "raw" {
+	if inspector != nil {
+		inspector.Finish()
+		virtual, err := inspector.Check(*current.DiskFormat, u.limits.RequireFormat, u.limits.GPTNonfatalCheck)
+		var invalid *format.ErrInvalidImageData
+		if errors.As(err, &invalid) {
+			// InvalidImageData: 415, the image is restored to queued.
+			return fail(model.Fail(model.Unsupported, invalid.Msg))
+		}
+		if virtual > 0 {
+			content.VirtualSize = &virtual
+		}
+	} else if !u.limits.Inspect && *current.DiskFormat == "raw" {
 		n := info.Size
 		content.VirtualSize = &n
 	}
-	// QCOW2 and other formats without a verified inspector remain unknown (null).
 	if err = content.Validate(expected); err != nil {
 		return fail(store.ErrIntegrity)
 	}
@@ -477,7 +596,7 @@ func (u *UploadCoordinator) upload(ctx context.Context, who auth.Identity, value
 		if err = ctx.Err(); err != nil {
 			return fail(err)
 		}
-		if err = u.checkpoint(ctx, key, model.DataCommitted, &content, f.FinishData(ctx, id, key.AttemptID, content, u.now())); err != nil {
+		if err = u.checkpoint(ctx, key, model.DataCommitted, &content, u.finish(f, ctx, id, key, content)); err != nil {
 			return fail(err)
 		}
 		return content, nil
@@ -578,4 +697,53 @@ func (u *UploadCoordinator) verifyBlob(ctx context.Context, key store.Key, expec
 		return store.ErrIntegrity
 	}
 	return closeErr
+}
+
+// storageUsage is the repository's project usage (user_get_storage_usage).
+type storageUsage interface {
+	ProjectUsage(ctx context.Context, project string) (model.Usage, error)
+}
+
+func (u *UploadCoordinator) storageRemaining(ctx context.Context, owner string) (int64, error) {
+	r, ok := u.transfers.(storageUsage)
+	if !ok {
+		return u.limits.StorageQuota, nil
+	}
+	usage, err := r.ProjectUsage(ctx, owner)
+	if err != nil {
+		return 0, uploadDBError(err, "")
+	}
+	return u.limits.StorageQuota - usage.SizeTotal, nil
+}
+
+func storageQuotaFull(detail string) error {
+	return model.Fail(model.LimitExceeded, "Image exceeds the storage quota: "+detail)
+}
+
+// quotaReader is the original's LimitingReader with StorageQuotaFull,
+// raised without arguments (its message keeps the placeholders).
+type quotaReader struct {
+	r    io.Reader
+	left int64
+}
+
+func (q *quotaReader) Read(p []byte) (int, error) {
+	n, err := q.r.Read(p)
+	q.left -= int64(n)
+	if q.left < 0 {
+		return n, errStorageQuotaFull
+	}
+	return n, err
+}
+
+// backendFinisher is FinishData into a backend (the MySQL repository).
+type backendFinisher interface {
+	FinishDataTo(ctx context.Context, id, attempt string, c model.DataContent, now time.Time, backend string) error
+}
+
+func (u *UploadCoordinator) finish(f dataFinisher, ctx context.Context, id string, key store.Key, c model.DataContent) error {
+	if b, ok := f.(backendFinisher); ok && key.Backend != "" {
+		return b.FinishDataTo(ctx, id, key.AttemptID, c, u.now(), key.Backend)
+	}
+	return f.FinishData(ctx, id, key.AttemptID, c, u.now())
 }

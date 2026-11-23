@@ -29,7 +29,7 @@ func imageReadSteps(lock bool) []sqlStep {
 	return []sqlStep{{query: q, rows: [][]driver.Value{append(fixtureRow(), `{"x": "original"}`, `["a"]`)}}}
 }
 
-const updateImageSQL = "UPDATE images SET name=?, visibility=?, disk_format=?, container_format=?, min_disk=?, min_ram=?, protected=?, os_hidden=?, updated_at=? WHERE id=? AND deleted=FALSE"
+const updateImageSQL = "UPDATE images SET name=?, visibility=?, disk_format=?, container_format=?, min_disk=?, min_ram=?, protected=?, os_hidden=?, status=?, updated_at=? WHERE id=? AND deleted=FALSE AND status=?"
 const deleteImageSQL = "UPDATE images SET deleted=TRUE, deleted_at=?, status='deleted', updated_at=? WHERE id=? AND deleted=FALSE"
 
 func patchSteps() []sqlStep {
@@ -44,7 +44,7 @@ func changed(i model.Image) (model.Image, error) {
 func TestSQLPatchCommitsAndRollsBackFailures(t *testing.T) {
 	steps := patchSteps()
 	steps[2].checkArgs = func(args []driver.NamedValue) {
-		if len(args) != 10 || args[9].Value != catalogID {
+		if len(args) != 12 || args[10].Value != catalogID || args[11].Value != "queued" {
 			t.Error("update identity not bound")
 		}
 	}
@@ -183,6 +183,8 @@ func TestSQLListScopesFiltersMarkersAndReadback(t *testing.T) {
 				m := imageReadSteps(false)
 				m[0].rows[0][1] = "other"
 				steps = append(steps, m...)
+				// a shared image of another project: not a member
+				steps = append(steps, query("SELECT COUNT(*) FROM image_members WHERE image_id=? AND member=? AND deleted=0", int64(0)))
 				steps = append(steps, execute("ROLLBACK"))
 			} else {
 				q, _ := listQuery(o, nil)

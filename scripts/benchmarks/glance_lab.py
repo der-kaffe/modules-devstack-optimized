@@ -190,7 +190,7 @@ class Lab(Session):
         return value['images']
 
     def roundtrip(self, values):
-        if not values['scenario'].startswith('upload-'):
+        if not values['scenario'].startswith('upload-') or not values.get('images'):
             return
         def probe(image):
             client = Client(self.args.url, self.token)
@@ -209,7 +209,11 @@ class Lab(Session):
         values = dict(values)
         values['tag'] = 'tt-glance-v2-' + uuid.UUID(values['namespace']).hex
         scenario = values['scenario']
-        values['seed_count'] = 100 if scenario in ('catalog-list', 'catalog-show') else (1 if scenario.startswith('download-') else values['concurrency'] if scenario.startswith('upload-') else 0)
+        # v7: nova-mix reads one seeded 16 MiB image; upload-qcow2 and
+        # import-direct-16m only create their own images (no seeds).
+        values['seed_count'] = (100 if scenario in ('catalog-list', 'catalog-show') else 1 if scenario.startswith('download-') or scenario == 'nova-mix'
+                                else 0 if scenario in ('upload-qcow2', 'import-direct-16m') else values['concurrency'] if scenario.startswith('upload-') else 0)
+        binary = scenario.startswith(('upload-', 'download-')) or scenario in ('nova-mix', 'import-direct-16m')
         self.current = values
         self.ledger.append(values)
         save_json(self.root / 'ledger.json', self.ledger, private=True)
@@ -218,7 +222,7 @@ class Lab(Session):
         routing = self.route(values['implementation'])
         images = []
         require(not self.catalog(), 'fresh own tag')
-        if scenario.startswith(('upload-', 'download-')):
+        if binary and values.get('size_bytes'):
             size = values['size_bytes']
             data = self.root / ('payload-' + str(size) + '.bin')
             if not data.exists():
@@ -234,7 +238,7 @@ class Lab(Session):
                 require(not (Path('/opt/stack/data/glance/images') / ident).exists(), 'fresh Python seed file')
             created = self.request(self.target(), 'POST', '/v2/images', 201, body=image)
             require(metadata_matches(created, {**image, 'owner': self.owner, 'status': 'queued'}), 'owned seed creation')
-            if scenario.startswith(('upload-', 'download-')):
+            if binary:
                 self.request(self.target(), 'PUT', base + '/file', 204, upload=data, content_type='application/octet-stream')
                 created = self.request(self.target(), 'GET', base, 200)
                 p = values['payload']

@@ -104,3 +104,65 @@ func TestOriginalTokenCacheTimeOverridesDefault(t *testing.T) {
 		t.Fatal(c.TokenCacheTime, err)
 	}
 }
+
+func TestOriginalKeystoneLimits(t *testing.T) {
+	load := func(conf string) (Config, error) {
+		env := map[string]string{"GLANCE_GO_CONFIG_FILE": originalConf(t, conf, 0644)}
+		return Load(func(k string) string { return env[k] }, "serve")
+	}
+	c, err := load(devstackConf)
+	if err != nil || c.Limits.Enabled {
+		t.Fatal("limits enabled without use_keystone_limits", err)
+	}
+	// As DevStack writes it.
+	limits := strings.Replace(devstackConf, "[DEFAULT]\n", "[DEFAULT]\nuse_keystone_limits = True\n", 1) +
+		"[oslo_limit]\nendpoint_id = 9520004904bb4bbbacaa6349bbc82816\nsystem_scope = all\nauth_url = http://192.168.122.10/identity\nauth_type = password\nusername = glance\npassword = svc\nuser_domain_name = Default\n"
+	c, err = load(limits)
+	if err != nil || !c.Limits.Enabled || c.Limits.URL != "http://192.168.122.10/identity/v3" || c.Limits.EndpointID != "9520004904bb4bbbacaa6349bbc82816" || c.Limits.SystemScope != "all" || c.Limits.Username != "glance" {
+		t.Fatal(c.Limits, err)
+	}
+	for _, bad := range []string{
+		strings.Replace(limits, "endpoint_id = 9520004904bb4bbbacaa6349bbc82816\n", "", 1),
+		strings.Replace(limits, "system_scope = all", "system_scope = domain", 1),
+		strings.Replace(limits, "use_keystone_limits = True", "use_keystone_limits = maybe", 1),
+	} {
+		if _, err = load(bad); err == nil {
+			t.Fatal("invalid [oslo_limit] accepted")
+		}
+	}
+}
+
+func TestOriginalImageSizeCapAndQuotas(t *testing.T) {
+	conf := strings.Replace(devstackConf, "[DEFAULT]\n", "[DEFAULT]\nimage_size_cap = 5368709120\nimage_member_quota = 5\nimage_tag_quota = -1\n", 1)
+	env := map[string]string{"GLANCE_GO_CONFIG_FILE": originalConf(t, conf, 0644)}
+	c, err := Load(func(k string) string { return env[k] }, "serve")
+	if err != nil || c.Binary.MaxUploadBytes != 5<<30 || c.MemberQuota != 5 || c.TagQuota != -1 || c.PropertyQuota != 128 || !c.ImageFormat.RequireMatch {
+		t.Fatal(c.Binary.MaxUploadBytes, c.MemberQuota, c.TagQuota, c.PropertyQuota, err)
+	}
+	env["GLANCE_GO_MAX_UPLOAD_BYTES"] = "1024"
+	if c, err = Load(func(k string) string { return env[k] }, "serve"); err != nil || c.Binary.MaxUploadBytes != 1024 {
+		t.Fatal("explicit bound ignored", c.Binary.MaxUploadBytes, err)
+	}
+}
+
+func TestOriginalEnabledBackendsAndDelayedDelete(t *testing.T) {
+	conf := strings.Replace(devstackConf, "[DEFAULT]\n", "[DEFAULT]\nenabled_backends = fast:file, cheap:file\ndelayed_delete = True\n", 1)
+	conf = strings.Replace(conf, "[glance_store]\n", "[glance_store]\ndefault_backend = fast\n", 1)
+	conf += "[fast]\nfilesystem_store_datadir = /opt/stack/data/glance/fast/\nstore_description = Fast\n[cheap]\nfilesystem_store_datadir = /opt/stack/data/glance/cheap\nweight = 5\n[os_glance_staging_store]\nfilesystem_store_datadir = /opt/stack/data/glance/os_glance_staging_store\n"
+	env := map[string]string{"GLANCE_GO_CONFIG_FILE": originalConf(t, conf, 0644)}
+	c, err := Load(func(k string) string { return env[k] }, "serve")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !c.DelayedDelete || c.DefaultBackend != "fast" || len(c.Backends) != 2 || c.Backends[0].Dir != "/opt/stack/data/glance/fast" || c.Backends[0].Description != "Fast" || c.Backends[1].Weight != 5 {
+		t.Fatalf("%+v %v", c.Backends, c.DelayedDelete)
+	}
+	if c.Binary.OfficialStoreDir != "/opt/stack/data/glance/fast" || c.Import.StagingDir != "/opt/stack/data/glance/os_glance_staging_store" {
+		t.Fatal("default store / staging", c.Binary.OfficialStoreDir, c.Import.StagingDir)
+	}
+	bad := strings.Replace(conf, "cheap:file", "cheap:rbd", 1)
+	env["GLANCE_GO_CONFIG_FILE"] = originalConf(t, bad, 0644)
+	if _, err = Load(func(k string) string { return env[k] }, "serve"); err == nil {
+		t.Fatal("non-file backend accepted")
+	}
+}

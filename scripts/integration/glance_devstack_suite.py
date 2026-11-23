@@ -117,12 +117,15 @@ class Suite:
         def show(unit, prop):
             return subprocess.run(['systemctl', 'show', '-p', prop, '--value', unit], capture_output=True, text=True).stdout.strip()
         require(show(UNIT, 'ActiveState') == 'active' and show(UNIT, 'UnitFileState') == 'enabled', 'devstack@g-go active and enabled')
-        require(show(ORIGINAL_UNIT, 'ActiveState') != 'active' and show(ORIGINAL_UNIT, 'UnitFileState') == 'disabled',
-                'devstack@g-api stopped and disabled')
+        # Go only (default): the original is not installed at all; with
+        # GLANCE_GO_INSTALL_ORIGINAL it is installed, stopped and disabled.
+        original = show(ORIGINAL_UNIT, 'LoadState')
+        require(original == 'not-found' or show(ORIGINAL_UNIT, 'ActiveState') != 'active' and show(ORIGINAL_UNIT, 'UnitFileState') == 'disabled',
+                'devstack@g-api absent, or stopped and disabled')
         listen = unit_listen(show(UNIT, 'Environment'))
         require(proxied_backend(APACHE_SITE.read_text()) == 'http://' + listen, 'Apache /image proxies to g-go')
         require(self.url.endswith('/image'), 'Keystone image endpoint is /image')
-        return {'listen': listen, 'endpoint': self.url}
+        return {'listen': listen, 'endpoint': self.url, 'original_installed': original != 'not-found'}
 
     def case_auth_fail_closed(self):
         for token in (None, 'tt-invalid-token'):
@@ -223,7 +226,7 @@ class Suite:
         got = file_digest(out)
         out.unlink()
         require((got['size'], got['md5'], got['sha512']) == (cirros['size'], cirros['checksum'], cirros['os_hash_value']),
-                'Glance Go serves the CirrOS uploaded through g-api with its hashes')
+                'Glance Go serves the CirrOS DevStack uploaded with its hashes')
         return {'image': cirros['id'], 'size': cirros['size']}
 
     def boot(self, image_id):

@@ -936,7 +936,7 @@ Revalidación del 28/10/2026: se ejecutó `GOMAXPROCS=2 GOTOOLCHAIN=local make c
 - Fuente 85a78de, sin cambios productivos Go: 42/42 solicitudes correctas con
   Keystone real, MySQL/store propios, metadatos y bytes íntegros; Python 1 MiB,
   Go directo 1/16/64 MiB y Go público Apache 1 MiB. Payloads y credenciales fuera
-  de Git. Evidencia.
+  de Git. [Evidencia](../evidence/sprint5/benchmarks/glance-v2-functional-preflight-20261031/README.md).
 - Placement original se mantuvo como control; catálogo original y hashes Apache
   iguales antes/después. Runtime/identidad/bytes propios retirados, controles
   restaurados, todos los originales activos y VM apagada normalmente.
@@ -975,7 +975,7 @@ Revalidación del 28/10/2026: se ejecutó `GOMAXPROCS=2 GOTOOLCHAIN=local make c
   CacheFilter crea Notifier/get_transport por cached request; acumulación de
   transports/sockets es hipótesis a contrastar mediante calibración dedicada.
 - Diagnóstico de sólo lectura, originales/restauración verificados y VM apagada.
-  Evidencia.
+  [Evidencia](../evidence/sprint5/benchmarks/glance-compact-v2-20261031-01/README.md).
 - Se prepara v3 (misma matriz108) para comparar API/catálogo/bytes sin bus de
   notificaciones, fuera del alcance Go. Driver oficial noop en copia privada,
   OS_GLANCE_CONFIG_DIR mediante dropin sólo /run; originales/caché/límites sin
@@ -990,7 +990,7 @@ Revalidación del 28/10/2026: se ejecutó `GOMAXPROCS=2 GOTOOLCHAIN=local make c
   sockets por worker respaldan acumulación de transportes por cached request.
 - Control temporal OS_GLANCE_CONFIG_DIR en /run restaurado y hashes originales
   iguales; caché y límite2048 intactos. Recursos propios retirados y VM apagada.
-  Evidencia.
+  [Evidencia](../evidence/sprint5/benchmarks/glance-v3-fd-calibration-20261031/README.md).
 - No es benchmark de rendimiento (cliente VM-local). V3 mide API/bytes sin bus
   RabbitMQ; piloto36 y oficial108 todavía pendientes. V2 fallido preservado.
 - Se añade guarda de crecimiento FD máximo256 por ventana, sin aceptar datos
@@ -1185,8 +1185,8 @@ Revalidación del 28/10/2026: se ejecutó `GOMAXPROCS=2 GOTOOLCHAIN=local make c
   Límites: otro hardware (VM de 6 GiB). No se comparan los valores absolutos
   con la v3; solo la dirección Go/Python. La primera corrida del piloto
   encontró el deadlock corregido en `525608f`.
-  Evidencia
-  y resultados.
+  [Evidencia](../evidence/sprint5/benchmarks/glance-compact-v4-pcjuan-20261119/README.md)
+  y [resultados](../docs/benchmarks/glance-results-v4-pc-juan-20261119.md).
 - 2026-11-20, Glance Go sobre el catálogo y el store del Glance original
   (`GLANCE_GO_CATALOG=official`, `glance_replace.py install`), pedido por Juan.
   - **Implementación:** Glance Go lee y escribe las tablas `images`,
@@ -1258,7 +1258,7 @@ Revalidación del 28/10/2026: se ejecutó `GOMAXPROCS=2 GOTOOLCHAIN=local make c
   reactivados y VM apagada.
 - **Límites:** tres pares, sin significancia estadística; las otras tres cargas
   no se repitieron con el binario nuevo.
-  Evidencia.
+  [Evidencia](../evidence/sprint5/benchmarks/placement-compact-v2-reads-20261120/README.md).
 
 ### 2026-11-20 — Placement: re-medición de candidates, claim-cycle y nova-mix
 
@@ -1271,7 +1271,7 @@ Revalidación del 28/10/2026: se ejecutó `GOMAXPROCS=2 GOTOOLCHAIN=local make c
   estable entre repeticiones y sin causa identificada; infla los cocientes.
 - **Laboratorio:** original sin cambios, recursos propios retirados, timers apt
   reactivados y VM apagada.
-  Evidencia.
+  [Evidencia](../evidence/sprint5/benchmarks/placement-compact-v2-nova-20261120/README.md).
 - 2026-11-20, método de RAM de las campañas de Glance:
   - **Cambios:** se agrega `glance_memory.py` (cgroup v2 `memory.stat`
     `anon`/`file` a 10 Hz por unidad) y memcached como grupo de control. El
@@ -1432,3 +1432,90 @@ Revalidación del 28/10/2026: se ejecutó `GOMAXPROCS=2 GOTOOLCHAIN=local make c
     El original subió un 30–37 % más lento que en la v5 en el DevStack
     reinstalado: los factores se comparan dentro de cada campaña.
     Resultados.
+- 2026-11-23, Glance Go con la API v2 completa que deja activa DevStack
+  (rama local `feat/glance-full-api`, sobre la de la PR #27): miembros, tags
+  por ruta, desactivar/reactivar, cuotas de Keystone y `/v2/info/*`,
+  importación interoperable con tareas, caché `centralized_db` con
+  `/v2/cache`, metadefs y los 16 schemas idénticos al original
+  ([detalle](../docs/glance/full-api.md)).
+  - **Verificación:** `make check` OK; integración MySQL 11/11 con `-race`
+    (nuevas: `members`, `imports`); suite unificada 11/11 con el binario
+    nuevo; comparación diferencial con el original vivo, 449 de 450 casos
+    idénticos (el que falta es el volcado de `jsonschema` en un 400).
+  - **Costo de las cuotas:** con `use_keystone_limits` activo en los dos,
+    crear una imagen tarda 99 ms (p50) en Glance Go y 376 ms en el original
+    (30 creaciones seguidas). Sin cuotas, Go tardaba unos 17 ms: el resto es
+    la ida a Keystone, que el original también paga.
+  - **Fuera del alcance todavía:** varios stores y `copy-image`, la API de
+    ubicaciones, la inspección del formato al subir, la protección de
+    propiedades y los plugins de importación. La campaña v6 midió la revisión
+    `a69474d`, sin estas funciones.
+- 2026-11-23, Glance 100 % en Go por defecto (rama local `feat/glance-full-api`):
+  el plugin DevStack ya no instala el Glance de Python
+  (`GLANCE_GO_INSTALL_ORIGINAL=False`); `glance-manage`, `glance-cache-pruner`,
+  `glance-cache-cleaner` y `glance-scrubber` son binarios Go. Se suman a la API:
+  inspección de formato (port de `format_inspector`, 600/600 decisiones iguales
+  al original), ubicaciones, políticas `policy.yaml` y protección de
+  propiedades, plugins de importación, cuotas locales, `POST /v2/tasks`,
+  `/healthcheck`, varios stores de archivos con `copy-image` y borrado diferido
+  ([detalle](../docs/glance/full-api.md)).
+  - **Verificación:** integración MySQL 12/12 con `-race` (nueva: `stores`, que
+    cubre `X-Image-Meta-Store`, `copy-image`, borrar la copia de un store y
+    `delayed_delete` + scrubber); en la VM sin `/opt/stack/glance` ni unidad
+    g-api, `glance-manage db check` OK y suite unificada 11/11 con los binarios
+    del commit `054ec95`.
+  - **Defecto encontrado:** el scrubber no veía las ubicaciones
+    `pending_delete` (son filas `deleted=1` y la capa SQL filtraba
+    `deleted=0`); corregido en el mismo commit.
+  - **Fuera del alcance:** `glance-download` y stores que no son de archivos.
+- 2026-11-23, optimizaciones del código nuevo (rama local `perf/glance-full-api`,
+  sobre la PR #28), con la regla de comparar con el original y medir antes y
+  después. Benchmarks en el PC (go1.24.4, `-count 5`, mediana):
+  - **Listado con `show_image_direct_url`** (o `show_multiple_locations`,
+    `enabled_backends`): una consulta de ubicaciones por página en vez de una
+    por imagen (25 → 1 en el general log de MySQL). En la VM,
+    `GET /v2/images?limit=25`, 300 peticiones: p50 9,49 → 3,74 ms. DevStack
+    deja estas opciones en `False`, así que la configuración por defecto y la
+    campaña v6 no tenían el problema (p50 por defecto: 3,07 ms).
+  - **Inspector de formato:** 64 MiB binarios en chunks de 1 MiB,
+    1,15 → 0,155 ms y 12,4 → 1,2 MB asignados; la subida con inspección baja
+    de 15,5 a 4,3 MB asignados. Corpus contra oslo.utils 8.2.0: 540/540.
+  - **copy-image:** 64 MiB entre stores, 197 → 92 ms (escritura y hashes en
+    paralelo, el mismo pipeline de la subida).
+  - **Protección de propiedades:** 5,7 → 0,59 µs por imagen de 12
+    propiedades. **Políticas:** `member_id` se consulta solo si una regla lo lee.
+  - **Descartado tras medir:** `DetectFile` ya termina en 0,37 ms por 64 MiB;
+    mover la inspección a un hilo aparte no compensa (menos de 1 % de la
+    subida).
+  - **Verificación:** `make check` OK; integración MySQL 12/12 con `-race`;
+    suite unificada 11/11 con el binario de `ad38130`.
+- 2026-11-23, optimizaciones de Glance Go sobre el código de las PR #28 y #29
+  (rama local `perf/limits-cache`, 3 commits), a partir de la latencia por
+  operación con 1 cliente y del conteo de consultas SQL de cada operación
+  (log general de MySQL). Medido en la VM por Apache con las mismas condiciones
+  de la campaña, original frente a nuevo, dos pasadas cada uno:
+  - **`create` 90-114 ms → 8-9 ms y `upload` de 1 MiB 109-145 ms → 25-27 ms:**
+    cada creación y cada subida preguntaba a Keystone por los límites (dos GET
+    de unos 30 ms) y contaba el uso en MySQL. Los límites de un proyecto se
+    reutilizan durante un TTL corto (5 s por defecto,
+    `GLANCE_GO_LIMITS_CACHE_SECONDS`; 0 pregunta siempre, como el original) y,
+    con los límites a mano, un recurso sin límite no consulta el uso. Un cambio
+    de límite tarda hasta el TTL en verse; las cuotas se siguen aplicando.
+  - **`download` de 1 MiB con 16 clientes 140 → 594 ops/s y p99 451 → 58 ms:**
+    cada descarga hacía un UPDATE sobre la misma fila de `cached_images`
+    (contador de accesos) y los 16 clientes esperaban ese bloqueo. Los accesos
+    se suman en memoria y se escriben una vez por segundo y al cerrar. Era la
+    causa de que en la v7 Python tuviera menor p99 en las descargas de 1 y
+    16 MiB con 16 clientes.
+  - **Menos relecturas de estado:** `upload` pasa de 18 a 14 consultas y
+    `delete` de 24 a 20 (un write confirmado es su propia prueba; solo un
+    commit dudoso se relee; el borrado conserva la lectura previa a quitar el
+    archivo). Mejora medida: 2-3 ms. `PATCH` escribe propiedades y tags solo
+    si cambiaron (de 4 a 2 consultas).
+  - **Defecto evitado por la integración:** el primer `PATCH` comparaba con el
+    objeto que el callback edita en el sitio y no habría guardado un cambio de
+    propiedades; ahora compara con una copia tomada antes.
+  - **Verificación:** `make check` OK; integración MySQL 12/12 con `-race`.
+  - **No medido todavía:** el efecto en la campaña (hay que repetirla con este
+    binario). `delete` queda en unos 27 ms en el banco de pruebas (en la
+    campaña v7 medía 10-18 ms, como la v6).

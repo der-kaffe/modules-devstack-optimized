@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -214,15 +216,18 @@ func (r *Repository) update(ctx context.Context, id string, change func(model.Im
 	if err != nil {
 		return result, err
 	}
+	// change may edit the maps and slices it is given in place: what to compare
+	// with is a copy taken before.
+	before := model.Image{Properties: maps.Clone(current.Properties), Tags: slices.Clone(current.Tags)}
 	result, err = change(current)
 	if err != nil {
 		return model.Image{}, err
 	}
-	if result.ID != id || result.Owner != current.Owner || result.Status != current.Status || !result.CreatedAt.Equal(current.CreatedAt) {
+	if result.ID != id || result.Owner != current.Owner || !result.CreatedAt.Equal(current.CreatedAt) || !statusChangeAllowed(current.Status, result.Status) {
 		return model.Image{}, errors.New("immutable image fields changed")
 	}
-	updated, err := r.exec(ctx, tx, `UPDATE images SET name=?, visibility=?, disk_format=?, container_format=?, min_disk=?, min_ram=?, protected=?, os_hidden=?, updated_at=? WHERE id=? AND deleted=FALSE`,
-		result.Name, result.Visibility, result.DiskFormat, result.ContainerFormat, result.MinDisk, result.MinRAM, result.Protected, result.Hidden, result.UpdatedAt.UTC(), id)
+	updated, err := r.exec(ctx, tx, `UPDATE images SET name=?, visibility=?, disk_format=?, container_format=?, min_disk=?, min_ram=?, protected=?, os_hidden=?, status=?, updated_at=? WHERE id=? AND deleted=FALSE AND status=?`,
+		result.Name, result.Visibility, result.DiskFormat, result.ContainerFormat, result.MinDisk, result.MinRAM, result.Protected, result.Hidden, result.Status, result.UpdatedAt.UTC(), id, current.Status)
 	if err != nil {
 		return model.Image{}, err
 	}
@@ -232,19 +237,30 @@ func (r *Repository) update(ctx context.Context, id string, change func(model.Im
 		return model.Image{}, repository.ErrConflict
 	}
 	// Parent lock serializes writers; child changes and parent update share commit.
-	if _, err = r.exec(ctx, tx, "DELETE FROM image_properties WHERE image_id=?", id); err != nil {
-		return model.Image{}, err
-	}
-	if _, err = r.exec(ctx, tx, "DELETE FROM image_tags WHERE image_id=?", id); err != nil {
-		return model.Image{}, err
-	}
-	if err = r.insertChildren(ctx, tx, id, result.Properties, result.Tags); err != nil {
-		return model.Image{}, err
+	// Properties and tags are rewritten only when they changed: renaming an
+	// image with many properties does not touch them.
+	if !maps.Equal(before.Properties, result.Properties) || !slices.Equal(before.Tags, result.Tags) {
+		if _, err = r.exec(ctx, tx, "DELETE FROM image_properties WHERE image_id=?", id); err != nil {
+			return model.Image{}, err
+		}
+		if _, err = r.exec(ctx, tx, "DELETE FROM image_tags WHERE image_id=?", id); err != nil {
+			return model.Image{}, err
+		}
+		if err = r.insertChildren(ctx, tx, id, result.Properties, result.Tags); err != nil {
+			return model.Image{}, err
+		}
 	}
 	if err = tx.Commit(); err != nil {
 		return model.Image{}, err
 	}
 	return result, nil
+}
+
+// statusChangeAllowed: a metadata update keeps the status, except the
+// original's deactivate/reactivate actions (active <-> deactivated). Data
+// transitions (saving, active after upload, deleted) have their own paths.
+func statusChangeAllowed(from, to string) bool {
+	return from == to || from == "active" && to == "deactivated" || from == "deactivated" && to == "active"
 }
 
 func (r *Repository) Delete(ctx context.Context, id string, now time.Time, check func(model.Image) error) error {
@@ -325,8 +341,18 @@ func listQuery(o model.ListOptions, marker *model.Image) (string, []any) {
 	args := []any{}
 	vis := o.Filters["visibility"]
 	if !o.Admin {
-		where = append(where, "(i.owner=? OR i.visibility IN ('public','community'))")
-		args = append(args, o.ProjectID)
+		// As the original: own, public and community images, and shared images
+		// of which the project is a member with member_status (accepted by
+		// default; "all" means any status).
+		member := "EXISTS (SELECT 1 FROM image_members m WHERE m.image_id=i.id AND m.member=? AND m.deleted=0"
+		if o.MemberStatus != "all" {
+			member += " AND m.status=?"
+		}
+		where = append(where, "(i.owner=? OR i.visibility IN ('public','community') OR (i.visibility='shared' AND "+member+")))")
+		args = append(args, o.ProjectID, o.ProjectID)
+		if o.MemberStatus != "all" {
+			args = append(args, o.MemberStatus)
+		}
 	}
 	if vis == "" {
 		where = append(where, "(i.owner=? OR i.visibility<>'community')")
@@ -415,6 +441,12 @@ func (r *Repository) List(ctx context.Context, o model.ListOptions) ([]model.Ima
 	var marker *model.Image
 	if o.Marker != "" {
 		image, e := r.readImage(ctx, tx, o.Marker, false)
+		if e == nil && !o.Admin && image.Owner != o.ProjectID && image.Visibility == "shared" {
+			var member bool
+			if member, e = r.isMemberTx(ctx, tx, image.ID, o.ProjectID); e == nil && member {
+				image.Visibility = "public" // visible: only for the check below
+			}
+		}
 		if errors.Is(e, repository.ErrNotFound) || (e == nil && !o.Admin && image.Owner != o.ProjectID && image.Visibility != "public" && image.Visibility != "community") {
 			return nil, model.Fail(model.Invalid, "Invalid or inaccessible marker.")
 		}

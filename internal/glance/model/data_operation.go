@@ -43,6 +43,9 @@ type DataState struct {
 	Checksum, HashAlgorithm, HashValue *string
 	UpdatedAt                          time.Time
 	Operation                          *DataOperation
+	// Backend is the store of the image's first active location in a
+	// multi-store deployment ("" for the default store).
+	Backend string
 }
 
 func lowerHex(s string, length int) bool {

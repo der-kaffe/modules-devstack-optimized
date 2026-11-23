@@ -89,9 +89,7 @@ func parseList(raw string) (model.ListOptions, error) {
 		q.Del(key)
 	}
 	if q.Has("member_status") {
-		if q.Get("member_status") != "accepted" {
-			return bad()
-		}
+		o.MemberStatus = q.Get("member_status")
 		q.Del("member_status")
 	}
 	for key, values := range q {
@@ -115,6 +113,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	for _, image := range images {
 		values = append(values, representation(image))
 	}
+	h.decorate(r, values...)
 	q := r.URL.Query()
 	q.Del("marker")
 	first := "/v2/images"
@@ -133,6 +132,10 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 func decodePointer(path string) (string, error) {
 	bad := func() (string, error) {
 		return "", model.Fail(model.Invalid, "Only a single JSON Pointer token is supported.")
+	}
+	// /locations/<position> reaches the original's location rules.
+	if strings.HasPrefix(path, "/locations/") {
+		return "locations", nil
 	}
 	if !strings.HasPrefix(path, "/") || strings.Contains(path[1:], "/") {
 		return bad()
@@ -260,6 +263,15 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 		if err := deleter.DeleteImage(r.Context(), r.Context().Value(identityKey{}).(auth.Identity), r.PathValue("id")); err != nil {
 			h.binaryFailure(w, err)
 			return
+		}
+		if id, err := model.CanonicalID(r.PathValue("id")); err == nil {
+			if h.imports != nil { // staged data of an image deleted before its import
+				h.imports.DiscardStaged(id)
+			}
+			if h.cache != nil { // as the original's cache middleware on DELETE
+				_ = h.cache.Delete(r.Context(), id)
+				_ = h.cache.Unqueue(id)
+			}
 		}
 		w.WriteHeader(http.StatusNoContent)
 		return

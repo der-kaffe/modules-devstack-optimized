@@ -27,7 +27,7 @@ func TestUploadSuccessAndCallOrder(t *testing.T) {
 	if c.Size != size || c.VirtualSize == nil || *c.VirtualSize != size || c.Checksum != expected.Checksum || c.SHA512 != expected.SHA512 {
 		t.Fatal(c)
 	}
-	want := []string{"catalog.Get", "sql.State", "sql.Reserve", "sql.State", "catalog.Get", "fs.Stage", "sql.Stage", "sql.State", "fs.Publish", "sql.State", "fs.OpenStream", "fs.Close", "sql.Publish", "sql.State", "sql.Commit", "sql.State"}
+	want := []string{"catalog.Get", "sql.State", "sql.Reserve", "catalog.Get", "fs.Stage", "sql.Stage", "fs.Publish", "sql.State", "fs.OpenStream", "fs.Close", "sql.Publish", "sql.Commit"}
 	if got := log.snapshot(); !reflect.DeepEqual(got, want) {
 		t.Fatal("wrong order", got)
 	}
@@ -257,10 +257,10 @@ func TestUnresolvedAndUnsafeStatesRetainEvidence(t *testing.T) {
 				d.failReadAt[2] = true
 			case "staged-read":
 				d.faults["Stage"] = uploadSQLFault{err: repository.ErrCommitUncertain, applied: true}
-				d.failReadAt[3] = true
+				d.failReadAt[2] = true // the acknowledged reservation is not read back
 			case "committed-read":
 				d.faults["Commit"] = uploadSQLFault{err: repository.ErrCommitUncertain, applied: true}
-				d.failReadAt[6] = true
+				d.failReadAt[2] = true // only the uncertain commit is read back
 			case "publish-open":
 				fs.faults["Publish"] = uploadStoreFault{err: errors.New("sync failed"), applied: true}
 				fs.faults["Open"] = uploadStoreFault{err: errors.New("unavailable")}
@@ -351,7 +351,7 @@ func TestCleanupFailuresPreserveFence(t *testing.T) {
 			case "Complete-unknown-not-applied":
 				d.faults["CompleteCleanup"] = uploadSQLFault{err: repository.ErrCommitUncertain}
 			case "cleanup-read":
-				d.failReadAt[4] = true
+				d.failReadAt[3] = true
 			}
 			_, err := u.Upload(context.Background(), identity("member"), uploadImageID, bytes.NewReader(uploadPayload), nil)
 			cleaned := tc == "Begin-unknown-applied" || tc == "Complete-unknown-applied"

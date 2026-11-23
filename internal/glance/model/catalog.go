@@ -23,6 +23,9 @@ type ListOptions struct {
 	Tags         []string
 	ProjectID    string
 	Admin        bool
+	// MemberStatus selects shared images by the project's membership status:
+	// accepted (default), pending, rejected or all.
+	MemberStatus string
 }
 
 func Sortable(key string) bool {
@@ -43,6 +46,12 @@ func (o ListOptions) Validate() (ListOptions, error) {
 			return bad()
 		}
 		o.Marker = id
+	}
+	if o.MemberStatus == "" {
+		o.MemberStatus = "accepted"
+	}
+	if !member(o.MemberStatus, "accepted pending rejected all") {
+		return bad()
 	}
 	o.Sort = append([]Sort(nil), o.Sort...)
 	if len(o.Sort) == 0 {
@@ -172,6 +181,10 @@ func ApplyPatch(image Image, operations []PatchOperation, now time.Time) (Image,
 	for _, op := range operations {
 		if !member(op.Op, "add replace remove") {
 			return Image{}, Fail(Invalid, "Unsupported JSON Patch operation.")
+		}
+		if op.Key == "locations" { // locations are invisible (show_multiple_locations off)
+			verb := map[string]string{"add": "add", "replace": "update", "remove": "remove"}[op.Op]
+			return Image{}, Fail(Forbidden, "It's not allowed to "+verb+" locations if locations are invisible.")
 		}
 		if Reserved(op.Key) && !Mutable(op.Key) {
 			return Image{}, Fail(Forbidden, "Attribute is immutable or reserved: "+op.Key)

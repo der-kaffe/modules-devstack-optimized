@@ -59,7 +59,7 @@ func TestUploadTwoCommitsLikeTheOriginal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"catalog.Get", "sql.State", "sql.Reserve", "sql.State", "catalog.Get", "fs.Stage", "fs.Publish", "sql.Finish", "sql.State"}
+	want := []string{"catalog.Get", "sql.State", "sql.Reserve", "catalog.Get", "fs.Stage", "fs.Publish", "sql.Finish"}
 	if got := log.snapshot(); !reflect.DeepEqual(got, want) {
 		t.Fatal("wrong order", got)
 	}

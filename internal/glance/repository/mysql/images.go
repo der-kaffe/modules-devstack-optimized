@@ -3,6 +3,7 @@ package mysql
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -21,6 +22,58 @@ type Repository struct {
 	stmts map[string]*sql.Stmt
 	// official, when set, makes this repository use the original Glance tables.
 	official *officialCatalog
+	// backends (multi-store): name -> directory, and the default's name.
+	backends       map[string]string
+	defaultBackend string
+	// delayedDelete is [DEFAULT] delayed_delete: DELETE leaves the data
+	// pending_delete for glance-scrubber instead of removing it.
+	delayedDelete bool
+}
+
+// SetDelayedDelete enables the original's delayed_delete.
+func (r *Repository) SetDelayedDelete(on bool) { r.delayedDelete = on }
+
+// SetBackends enables multi-store locations (enabled_backends).
+func (r *Repository) SetBackends(def string, dirs map[string]string) {
+	r.defaultBackend, r.backends = def, dirs
+}
+
+// MultiStore reports whether enabled_backends is configured.
+func (r *Repository) MultiStore() bool { return len(r.backends) > 0 }
+
+// locationFor is the location value and meta_data of an image's file in a
+// backend ("" is the default store).
+func (r *Repository) locationFor(id, backend string) (string, string) {
+	if !r.MultiStore() {
+		return r.location(id), "{}"
+	}
+	if backend == "" {
+		backend = r.defaultBackend
+	}
+	meta, _ := json.Marshal(map[string]string{"store": backend})
+	return "file://" + r.backends[backend] + "/" + id, string(meta)
+}
+
+// backendOf is the store of the image's first active location ("" for the
+// default one), as the original serves from the first location.
+func (r *Repository) backendOf(ctx context.Context, tx *sql.Tx, id string) (string, error) {
+	if !r.MultiStore() {
+		return "", nil
+	}
+	var meta sql.NullString
+	err := r.queryRow(ctx, tx, "SELECT meta_data FROM image_locations WHERE image_id=? AND deleted=0 AND status='active' ORDER BY id LIMIT 1", id).Scan(&meta)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	var m map[string]string
+	_ = json.Unmarshal([]byte(meta.String), &m)
+	if m["store"] == r.defaultBackend {
+		return "", nil
+	}
+	return m["store"], nil
 }
 
 var _ repository.Repository = (*Repository)(nil)
@@ -77,4 +130,20 @@ func (r *Repository) Get(ctx context.Context, id string) (model.Image, error) {
 		return model.Image{}, fmt.Errorf("complete metadata read: %w", err)
 	}
 	return image, nil
+}
+
+// AddStoreLocation records the image's copy in a backend (copy-image).
+func (r *Repository) AddStoreLocation(ctx context.Context, id, backend string, now time.Time) error {
+	value, meta := r.locationFor(id, backend)
+	at := now.UTC()
+	_, err := r.db.ExecContext(ctx, r.sql("INSERT INTO image_locations (image_id, value, meta_data, status, created_at, updated_at, deleted) VALUES (?, ?, ?, 'active', ?, ?, 0)"), id, value, meta, at, at)
+	return err
+}
+
+// RemoveStoreLocation soft-deletes the image's location in a backend.
+func (r *Repository) RemoveStoreLocation(ctx context.Context, id, backend string, now time.Time) error {
+	value, _ := r.locationFor(id, backend)
+	at := now.UTC()
+	_, err := r.db.ExecContext(ctx, r.sql("UPDATE image_locations SET status='deleted', deleted=1, deleted_at=?, updated_at=? WHERE image_id=? AND value=? AND deleted=0"), at, at, id, value)
+	return err
 }

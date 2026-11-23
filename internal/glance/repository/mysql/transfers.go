@@ -254,6 +254,11 @@ func (r *Repository) CommitData(ctx context.Context, id, attempt string, now tim
 // moves the reserved operation to committed. (Stage, Publish and Commit stay
 // for compatibility; a direct write to <image-id> needs no step between.)
 func (r *Repository) FinishData(ctx context.Context, id, attempt string, c model.DataContent, now time.Time) error {
+	return r.FinishDataTo(ctx, id, attempt, c, now, "")
+}
+
+// FinishDataTo is FinishData with the location in a backend ("": default).
+func (r *Repository) FinishDataTo(ctx context.Context, id, attempt string, c model.DataContent, now time.Time, backend string) error {
 	if err := transferIDs(id, attempt); err != nil {
 		return err
 	}
@@ -274,7 +279,8 @@ func (r *Repository) FinishData(ctx context.Context, id, attempt string, c model
 		if err := r.ack(ctx, tx, "UPDATE images SET status='active', size=?, virtual_size=?, checksum=?, os_hash_algo='sha512', os_hash_value=?, updated_at=? WHERE id=? AND status='saving' AND deleted=FALSE", c.Size, c.VirtualSize, c.Checksum, c.SHA512, at, id); err != nil {
 			return err
 		}
-		if err := r.ack(ctx, tx, "INSERT INTO image_locations (image_id, value, meta_data, status, created_at, updated_at, deleted) VALUES (?, ?, '{}', 'active', ?, ?, 0)", id, r.location(id), at, at); err != nil {
+		value, meta := r.locationFor(id, backend)
+		if err := r.ack(ctx, tx, "INSERT INTO image_locations (image_id, value, meta_data, status, created_at, updated_at, deleted) VALUES (?, ?, ?, 'active', ?, ?, 0)", id, value, meta, at, at); err != nil {
 			return err
 		}
 		return r.ack(ctx, tx, "UPDATE image_data_operations SET phase='committed', size=?, virtual_size=?, checksum=?, os_hash_value=?, updated_at=? WHERE image_id=? AND attempt_id=? AND phase='reserved'", c.Size, c.VirtualSize, c.Checksum, c.SHA512, at, id, attempt)
@@ -346,7 +352,12 @@ func (r *Repository) DataState(ctx context.Context, id string) (model.DataState,
 	if canonical, err := model.CanonicalID(id); err != nil || canonical != id {
 		return result, model.Fail(model.Invalid, "Canonical image UUID required.")
 	}
-	err := r.dataTransaction(ctx, id, func(_ context.Context, _ *sql.Tx, s model.DataState) error { result = s; return nil })
+	err := r.dataTransaction(ctx, id, func(ctx context.Context, tx *sql.Tx, s model.DataState) error {
+		var err error
+		s.Backend, err = r.backendOf(ctx, tx, id)
+		result = s
+		return err
+	})
 	return result, err
 }
 
@@ -367,6 +378,9 @@ func (r *Repository) DataStateSnapshot(ctx context.Context, id string) (model.Da
 	defer tx.Rollback()
 	s, err := r.queryDataState(ctx, tx, id, readDataImage, readDataOperation)
 	if err != nil {
+		return model.DataState{}, err
+	}
+	if s.Backend, err = r.backendOf(ctx, tx, id); err != nil {
 		return model.DataState{}, err
 	}
 	if err = tx.Commit(); err != nil {
@@ -405,6 +419,9 @@ func (r *Repository) DownloadView(ctx context.Context, id string) (model.Image, 
 	} else if !errors.Is(err, sql.ErrNoRows) {
 		return model.Image{}, model.DataState{}, err
 	} else if s.Operation, err = r.adoptable(ctx, tx, s); err != nil {
+		return model.Image{}, model.DataState{}, err
+	}
+	if s.Backend, err = r.backendOf(ctx, tx, id); err != nil {
 		return model.Image{}, model.DataState{}, err
 	}
 	if err = tx.Commit(); err != nil {

@@ -92,7 +92,15 @@ def analyze(root):
                 raise ValueError('raw request counts/validity disagree')
             expected_operations = (['fresh-id', 'create', 'patch', 'verify', 'delete', 'verify-absent'] if report['scenario'] == 'catalog-lifecycle'
                                    else ['fresh-id', 'create', 'upload', 'verify-upload', 'delete', 'verify-absent'] if report['scenario'].startswith('upload-')
-                                   else ['download'] if report['scenario'].startswith('download-') else [report['scenario']])
+                                   else ['download'] if report['scenario'].startswith('download-')
+                                   else ['show', 'download', 'list'] if report['scenario'] == 'nova-mix' else [report['scenario']])
+            def cycle_ok(ops):
+                if report['scenario'].startswith('import-'):
+                    # import-wait repeats until the image is active
+                    head, tail = ['fresh-id', 'create', 'stage', 'import'], ['verify-import', 'delete', 'verify-absent']
+                    middle = ops[len(head):len(ops) - len(tail)]
+                    return ops[:len(head)] == head and ops[len(ops) - len(tail):] == tail and middle and set(middle) == {'import-wait'}
+                return ops == expected_operations
             cycles, per_operation, ttfb = {}, {}, []
             transfer = 0
             for s in samples:
@@ -104,9 +112,9 @@ def analyze(root):
                     ttfb.append(s['ttfb_ns'] / 1e6)
                 if s['operation'] == 'download':
                     transfer += s['response_bytes']
-                if s['operation'] == 'upload':
+                if s['operation'] in ('upload', 'stage'):
                     transfer += s['request_bytes']
-            if len(cycles) != m['cycles'] or any(ops != expected_operations for ops in cycles.values()) or transfer != m['validated_payload_bytes']:
+            if len(cycles) != m['cycles'] or any(not cycle_ok(ops) for ops in cycles.values()) or transfer != m['validated_payload_bytes']:
                 raise ValueError('incomplete raw cycle or payload accounting mismatch')
             rates = {'correct_ops_s': len(samples) / m['elapsed_s'], 'complete_cycles_s': len(cycles) / m['elapsed_s'],
                      'validated_payload_mib_s': transfer / m['elapsed_s'] / 1024**2}

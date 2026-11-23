@@ -21,19 +21,20 @@ def utc():
 def run(config, token, output, *, duration=30, warmup=10, abort_check=None):
     """One complete cycle may drain past deadline; its full time is counted."""
     scenarios = {'catalog-list', 'catalog-show', 'catalog-lifecycle',
-                 'upload-1m', 'upload-16m', 'upload-64m', 'download-1m', 'download-16m', 'download-64m'}
+                 'upload-1m', 'upload-16m', 'upload-64m', 'download-1m', 'download-16m', 'download-64m',
+                 'import-direct-16m', 'upload-qcow2', 'nova-mix'}
     if config['scenario'] not in scenarios:
         raise ValueError('unsupported scenario before any request')
     Client(config['url'], token, timeout=config.get('metadata_timeout_s', 10), binary_timeout=config.get('binary_timeout_s', 120)).close()  # Validate the endpoint before worker barriers.
-    if config['scenario'] in ('catalog-list', 'catalog-show') or config['scenario'].startswith('download-'):
+    if config['scenario'] in ('catalog-list', 'catalog-show', 'nova-mix') or config['scenario'].startswith('download-'):
         ids = [i['id'] for i in config['images']]
         if not ids or len(set(ids)) != len(ids):
             raise ValueError('unique seeded images required')
-    if config['scenario'].startswith(('upload-', 'download-')):
+    if config['scenario'].startswith(('upload-', 'download-', 'import-')) or config['scenario'] == 'nova-mix':
         expected = config['payload']
         if type(expected['size']) is not int or not 0 < expected['size'] <= 64 * 1024**2:
             raise ValueError('controlled payload size required')
-        if config['scenario'].startswith('upload-') and Path(config['payload_file']).stat().st_size != expected['size']:
+        if config['scenario'].startswith(('upload-', 'import-')) and Path(config['payload_file']).stat().st_size != expected['size']:
             raise ValueError('prepared payload length changed')
     output = Path(output)
     output.mkdir(parents=True, exist_ok=False)
@@ -113,6 +114,16 @@ def run(config, token, output, *, duration=30, warmup=10, abort_check=None):
                             seed = config['images'][index % len(config['images'])]
                             call('catalog-show', 'GET', '/v2/images/' + seed['id'], 200,
                                  validate=lambda value: metadata_matches(value, seed), ident=seed['id'])
+                        elif scenario == 'nova-mix':
+                            # What Nova does to boot from an image: show it,
+                            # download it, list active images.
+                            seed = config['images'][0]
+                            call('show', 'GET', '/v2/images/' + seed['id'], 200,
+                                 validate=lambda value: metadata_matches(value, seed), ident=seed['id'])
+                            call('download', 'GET', '/v2/images/' + seed['id'] + '/file', 200, download=True, ident=seed['id'])
+                            validated_bytes += expected['size']
+                            call('list', 'GET', '/v2/images?' + urlencode({'status': 'active', 'visibility': 'private', 'tag': tag}), 200,
+                                 validate=lambda value: [i.get('id') for i in value['images']] == [seed['id']])
                         elif scenario.startswith('download-'):
                             seed = config['images'][index % len(config['images'])]
                             call('download', 'GET', '/v2/images/' + seed['id'] + '/file', 200, download=True, ident=seed['id'])
@@ -123,7 +134,7 @@ def run(config, token, output, *, duration=30, warmup=10, abort_check=None):
                             base = '/v2/images/' + ident
                             call('fresh-id', 'GET', base, 404, ident=ident)
                             image = {'id': ident, 'name': name, 'owner': owner, 'tags': [tag],
-                                     'disk_format': 'raw', 'container_format': 'bare', 'visibility': 'private'}
+                                     'disk_format': 'qcow2' if scenario == 'upload-qcow2' else 'raw', 'container_format': 'bare', 'visibility': 'private'}
                             # Record the exclusive precondition/intent before POST; a lost reply
                             # can be cleaned only after rechecking these exact ownership fields.
                             with lock:
@@ -143,7 +154,27 @@ def run(config, token, output, *, duration=30, warmup=10, abort_check=None):
                                 call('verify', 'GET', base, 200, validate=lambda value: owned(value, ident, name) and value.get('status') == 'queued', ident=ident)
                             elif scenario.startswith('upload-'):
                                 call('upload', 'PUT', base + '/file', 204, file=upload, kind='application/octet-stream', ident=ident)
-                                call('verify-upload', 'GET', base, 200,
+                                want = {**image, 'status': 'active', 'size': expected['size'],
+                                        'checksum': expected['md5'], 'os_hash_algo': 'sha512', 'os_hash_value': expected['sha512']}
+                                if 'virtual_size' in expected:
+                                    want['virtual_size'] = expected['virtual_size']
+                                call('verify-upload', 'GET', base, 200, validate=lambda value: metadata_matches(value, want), ident=ident)
+                            elif scenario.startswith('import-'):
+                                # Interoperable import: stage, glance-direct, wait for active.
+                                call('stage', 'PUT', base + '/stage', 204, file=upload, kind='application/octet-stream', ident=ident)
+                                call('import', 'POST', base + '/import', 202, body={'method': {'name': 'glance-direct'}}, ident=ident)
+                                while True:
+                                    # Glance Go releases the import lock to 'queued' for an instant
+                                    # before it reserves the upload (the original goes importing ->
+                                    # active): 'queued' is an in-flight state only while the image
+                                    # still holds os_glance_import_task.
+                                    state = call('import-wait', 'GET', base, 200,
+                                                 validate=lambda value: value.get('status') in ('uploading', 'importing', 'saving', 'active')
+                                                 or (value.get('status') == 'queued' and bool(value.get('os_glance_import_task'))), ident=ident)
+                                    if state.get('status') == 'active' and not state.get('os_glance_import_task'):
+                                        break
+                                    time.sleep(config['import_poll_pause_s'])
+                                call('verify-import', 'GET', base, 200,
                                      validate=lambda value: metadata_matches(value, {**image, 'status': 'active', 'size': expected['size'],
                                                                                   'checksum': expected['md5'], 'os_hash_algo': 'sha512', 'os_hash_value': expected['sha512']}), ident=ident)
                             else:
@@ -152,7 +183,7 @@ def run(config, token, output, *, duration=30, warmup=10, abort_check=None):
                             call('verify-absent', 'GET', base, 404, ident=ident)
                             with lock:
                                 pending.pop(ident)
-                            if scenario.startswith('upload-'):
+                            if scenario.startswith(('upload-', 'import-')):
                                 validated_bytes += expected['size']
                         cycles += 1
                 except (ValueError, KeyError, TypeError):

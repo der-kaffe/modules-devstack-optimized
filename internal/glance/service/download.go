@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"io"
 	"os"
 	"sync"
 
@@ -93,7 +94,7 @@ func (u *UploadCoordinator) downloadImage(ctx context.Context, who auth.Identity
 	if err != nil {
 		return i, downloadError(ctx, err)
 	}
-	return i, downloadVisible(who, id, i)
+	return i, u.downloadVisible(ctx, who, id, i)
 }
 
 // downloadViewer reads the image row and its data state in ONE read-only
@@ -102,17 +103,49 @@ type downloadViewer interface {
 	DownloadView(context.Context, string) (model.Image, model.DataState, error)
 }
 
-func downloadVisible(who auth.Identity, id string, i model.Image) error {
+// memberChecker is implemented by the MySQL repository (image_members).
+type memberChecker interface {
+	IsMember(ctx context.Context, imageID, project string) (bool, error)
+}
+
+func (u *UploadCoordinator) downloadVisible(ctx context.Context, who auth.Identity, id string, i model.Image) error {
 	if i.ID != id {
 		return ErrUploadReconciliation
 	}
 	if i.Status == "deleted" {
 		return notFound(id)
 	}
-	// Same project/visibility policy as the B20 metadata reader; identity and
+	// Same project/visibility policy as the metadata reader; identity and
 	// reader/admin role were checked before any catalog or filesystem access.
+	// Only a shared image of another project needs the membership lookup.
 	if !who.HasRole("admin") && i.Owner != who.ProjectID && i.Visibility != "public" && i.Visibility != "community" {
-		return notFound(id)
+		m, ok := u.images.(memberChecker)
+		if !ok {
+			m, ok = u.transfers.(memberChecker)
+		}
+		if i.Visibility != "shared" || !ok {
+			return notFound(id)
+		}
+		member, err := m.IsMember(ctx, id, who.ProjectID)
+		if err != nil {
+			return downloadError(ctx, err)
+		}
+		if !member {
+			return notFound(id)
+		}
+	}
+	if overridden() {
+		target := visibilityTarget(who, i)
+		if i.Owner != who.ProjectID && i.Visibility == "shared" {
+			target["member_id"] = who.ProjectID // a member: checked above
+		}
+		if err := Permit(who, "download_image", target, nil); err != nil {
+			return err
+		}
+	}
+	// As the original's image_data download.
+	if i.Status == "deactivated" && !who.HasRole("admin") {
+		return model.Fail(model.Forbidden, "The requested image has been deactivated. Image data download is forbidden.")
 	}
 	return nil
 }
@@ -176,7 +209,7 @@ func downloadReceipt(s model.DataState) (store.Key, model.DataContent, error) {
 		return store.Key{}, model.DataContent{}, ErrUploadReconciliation
 	}
 	c := model.DataContent{Size: *o.Size, VirtualSize: o.VirtualSize, Checksum: *o.Checksum, SHA512: *o.SHA512}
-	k := store.Key{ImageID: s.ImageID, AttemptID: o.AttemptID}
+	k := store.Key{ImageID: s.ImageID, AttemptID: o.AttemptID, Backend: s.Backend}
 	if !committed(s, k, c) || c.Validate(o.ExpectedSize) != nil {
 		return k, c, ErrUploadReconciliation
 	}
@@ -196,7 +229,7 @@ func (u *UploadCoordinator) OpenDownload(ctx context.Context, who auth.Identity,
 	if err := who.Check(u.now()); err != nil {
 		return nil, err
 	}
-	if !who.HasRole("reader") && !who.HasRole("admin") {
+	if !overridden() && !who.HasRole("reader") && !who.HasRole("admin") {
 		return nil, model.Fail(model.Forbidden, "Reading images requires reader or admin role.")
 	}
 	id, err := model.CanonicalID(value)
@@ -214,7 +247,7 @@ func (u *UploadCoordinator) OpenDownload(ctx context.Context, who auth.Identity,
 		if err != nil {
 			return nil, downloadError(ctx, err)
 		}
-		if err = downloadVisible(who, id, i); err != nil {
+		if err = u.downloadVisible(ctx, who, id, i); err != nil {
 			return nil, err
 		}
 		s, owner = state, i.Owner
@@ -253,7 +286,18 @@ func (u *UploadCoordinator) OpenDownload(ctx context.Context, who auth.Identity,
 	if err != nil {
 		return nil, err
 	}
-	f, size, err := u.bytes.OpenStream(ctx, key)
+	// The image cache serves a complete copy when it has one.
+	var f store.ReadSeekCloser
+	var size int64
+	cached := false
+	if u.cache != nil {
+		if cf, ok := u.cache.open(id, content.Size); ok {
+			f, size, cached = cf, content.Size, true
+		}
+	}
+	if !cached {
+		f, size, err = u.bytes.OpenStream(ctx, key)
+	}
 	if err != nil {
 		if f != nil {
 			_ = f.Close()
@@ -291,6 +335,16 @@ func (u *UploadCoordinator) OpenDownload(ctx context.Context, who auth.Identity,
 			priority = notify.Error
 		}
 		u.notify("image.send", priority, notify.SendPayload(id, owner, who.ProjectID, who.UserID, n))
+		if u.cache != nil && n == requested && requested == content.Size { // a complete download
+			if cached {
+				u.cache.hit(id)
+			} else {
+				u.cache.fill(id, content.Size, content.Checksum, func(ctx context.Context) (io.ReadCloser, int64, string, error) {
+					f, _, err := u.bytes.OpenStream(ctx, key)
+					return f, content.Size, content.Checksum, err
+				}, nil)
+			}
+		}
 	}
 	return &Download{Body: &downloadBody{ReadSeekCloser: f, release: leave}, Size: content.Size, Checksum: content.Checksum, Sent: sent}, nil
 }

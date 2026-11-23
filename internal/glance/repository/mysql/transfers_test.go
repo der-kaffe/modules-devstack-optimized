@@ -397,6 +397,7 @@ func TestRecoveryInventoryFailsClosed(t *testing.T) {
 	}
 }
 
+const finishLocationSQL = "INSERT INTO image_locations (image_id, value, meta_data, status, created_at, updated_at, deleted) VALUES (?, ?, ?, 'active', ?, ?, 0)"
 const commitLocationSQL = "INSERT INTO image_locations (image_id, value, meta_data, status, created_at, updated_at, deleted) VALUES (?, ?, '{}', 'active', ?, ?, 0)"
 
 func TestForgetPurgedDataOnlyForMissingImages(t *testing.T) {
@@ -456,7 +457,7 @@ const finishOperationSQL = "UPDATE image_data_operations SET phase='committed', 
 // image_repo.save after glance_store.add.
 func TestFinishDataIsOneTransactionFromReserved(t *testing.T) {
 	ok := append(transferSteps("saving", false, dataFixture(model.DataReserved)),
-		execute(commitImageSQL), execute(commitLocationSQL), execute(finishOperationSQL), execute("COMMIT"))
+		execute(commitImageSQL), execute(finishLocationSQL), execute(finishOperationSQL), execute("COMMIT"))
 	if err := testRepo(scriptDB(t, ok), time.Second).FinishData(context.Background(), catalogID, attemptA, receipt(), dataNow); err != nil {
 		t.Fatal(err)
 	}

@@ -1,15 +1,19 @@
-# DevStack plugin settings: Glance Go replaces the Glance image API (g-api).
+# DevStack plugin settings: Glance in Go (devstack@g-go).
 #
 #   [[local|localrc]]
 #   enable_plugin glance-go https://github.com/PaoloCastanon/modules-devstack-optimized main
 #
-# DevStack still installs, configures and migrates the original Glance (g-api):
-# Glance Go reads its glance-api.conf and serves its database, store directory
-# and Keystone service user. After DevStack has started everything (and uploaded
-# CirrOS through g-api), the plugin starts devstack@g-go, points Apache /image to
-# it and stops g-api. The image endpoint in Keystone does not change.
+# By default no Python Glance is installed: lib/glance-go-only replaces
+# DevStack's lib/glance functions (install, configure, accounts, init, start)
+# with Glance Go and its glance-manage, cache tools and scrubber. The image
+# endpoint, glance-api.conf and database are the ones DevStack would create.
+#
+# GLANCE_GO_INSTALL_ORIGINAL=True also installs the original Glance (g-api),
+# stopped, for comparisons: DevStack configures and migrates it, uploads
+# CirrOS through it, then the plugin starts g-go in its place.
 
 enable_service g-go
+GLANCE_GO_INSTALL_ORIGINAL=$(trueorfalse False GLANCE_GO_INSTALL_ORIGINAL)
 
 # Where enable_plugin cloned this repository.
 GLANCE_GO_DIR=${GLANCE_GO_DIR:-$DEST/glance-go}
@@ -28,3 +32,9 @@ GLANCE_GO_EXTRA_ENV=${GLANCE_GO_EXTRA_ENV:-}
 GLANCE_GO_TOOLCHAIN_VERSION=${GLANCE_GO_TOOLCHAIN_VERSION:-1.27.4}
 GLANCE_GO_TOOLCHAIN_SHA256=${GLANCE_GO_TOOLCHAIN_SHA256:-7226736c2339719cda28fbf3a54d71aa63bcefe376e98cef00034268dab24840}
 GLANCE_GO_TOOLCHAIN_DIR=${GLANCE_GO_TOOLCHAIN_DIR:-$DEST/go-$GLANCE_GO_TOOLCHAIN_VERSION}
+
+source $GLANCE_GO_DIR/devstack/lib/glance-go
+if [[ "$GLANCE_GO_INSTALL_ORIGINAL" != "True" ]]; then
+    disable_service g-api
+    source $GLANCE_GO_DIR/devstack/lib/glance-go-only
+fi

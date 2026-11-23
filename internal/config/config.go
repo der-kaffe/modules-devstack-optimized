@@ -41,6 +41,88 @@ type Config struct {
 	// (read from its glance-api.conf). Its files are in
 	// Binary.OfficialStoreDir, the original's filesystem_store_datadir.
 	OfficialCatalog string
+	// Limits is the original's use_keystone_limits with its [oslo_limit]
+	// credentials (Glance only, read only by serve).
+	Limits KeystoneLimits
+	// Import is the original's interoperable import configuration.
+	Import ImportSettings
+	// Cache is the original's image cache (paste flavor with "cache").
+	Cache CacheSettings
+	// ImageFormat is [image_format]: upload content inspection.
+	ImageFormat ImageFormatSettings
+	// Quotas are image_member_quota, image_property_quota, image_tag_quota.
+	MemberQuota, PropertyQuota, TagQuota int
+	// DBMaxRetries and DBRetryInterval are [database] max_retries and
+	// retry_interval (oslo.db: 10 and 10 s; -1 retries forever).
+	DBMaxRetries    int
+	DBRetryInterval time.Duration
+	// UserStorageQuota is user_storage_quota in bytes (0: none); applied
+	// only without use_keystone_limits, as the original.
+	UserStorageQuota int64
+	// ShowDirectURL, ShowMultipleLocations: show_image_direct_url and
+	// show_multiple_locations (both off by default, OSSN-0065).
+	ShowDirectURL, ShowMultipleLocations bool
+	// PolicyFile is [oslo_policy] policy_file, resolved next to glance-api.conf.
+	PolicyFile string
+	// DelayedDelete is [DEFAULT] delayed_delete (data left pending_delete
+	// for glance-scrubber).
+	DelayedDelete bool
+	// Backends are enabled_backends (multi-store); empty with one store.
+	Backends       []StoreBackend
+	DefaultBackend string
+	// PropertyProtectionFile and its rule format (roles or policies).
+	PropertyProtectionFile, PropertyProtectionFormat string
+}
+
+// ImageFormatSettings: require_image_format_match (default True) and
+// gpt_safety_checks_nonfatal, as the original.
+type ImageFormatSettings struct {
+	RequireMatch bool
+	GPTNonfatal  []string
+}
+
+// CacheSettings: image_cache_dir with the centralized_db driver (cached
+// images in the catalog database, per node_reference_url).
+type CacheSettings struct {
+	Enabled          bool
+	Dir              string
+	NodeURL          string // worker_self_reference_url
+	PrefetchInterval time.Duration
+	MaxSize          int64
+}
+
+// ImportSettings: node_staging_uri, enabled_import_methods,
+// task_time_to_live and [import_filtering_opts], with the original's defaults.
+type ImportSettings struct {
+	StagingDir                    string
+	Methods                       []string
+	TaskTimeToLive                time.Duration
+	AllowedSchemes, AllowedHosts  []string
+	DisallowedSchemes             []string
+	DisallowedHosts               []string
+	AllowedPorts, DisallowedPorts []int
+	// Plugins is [image_import_opts] image_import_plugins (glance-image-import.conf).
+	Plugins          []string
+	ConversionFormat string            // [image_conversion] output_format
+	InjectIgnore     []string          // [inject_metadata_properties] ignore_user_roles
+	Inject           map[string]string // [inject_metadata_properties] inject
+	VMDKAllowed      []string          // [image_format] vmdk_allowed_types
+	GPTNonfatal      []string          // [image_format] gpt_safety_checks_nonfatal
+}
+
+// KeystoneLimits is what oslo.limit reads: the Glance endpoint whose
+// registered and project limits apply, and the user that reads them
+// (system scope "all", or a project scope).
+type KeystoneLimits struct {
+	Enabled                                bool
+	URL, EndpointID                        string
+	Username, Password, UserDomainName     string
+	SystemScope                            string
+	ProjectName, ProjectDomainName, Region string
+	// CacheTTL is how long a project's limits from Keystone are reused
+	// (GLANCE_GO_LIMITS_CACHE_SECONDS, default 5 s; 0 asks Keystone every time,
+	// as the original does). A changed limit shows up within the TTL.
+	CacheTTL time.Duration
 }
 
 // ReadSecret rejects group/world-readable files and never returns their contents in errors.
@@ -231,4 +313,10 @@ func tokenCacheTime(getenv func(string) string, prefix string) (time.Duration, e
 		return 0, errors.New(prefix + "TOKEN_CACHE_TIME must be -1 (disabled) or 1..86400 seconds")
 	}
 	return time.Duration(max(n, 0)) * time.Second, nil
+}
+
+// StoreBackend is one enabled_backends entry (only "file" stores).
+type StoreBackend struct {
+	Name, Type, Dir, Description string
+	Weight                       int
 }

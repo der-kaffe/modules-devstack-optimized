@@ -54,10 +54,42 @@ type Filesystem struct {
 	lock    *os.File
 	staging *os.File
 	objects *os.File
-	keysMu  sync.Mutex
-	keys    map[string]*keyLock
-	staged  map[string]stagedIdentity // guarded by keysMu
-	ops     fileOps
+	// backends are the other enabled_backends' directories, by name.
+	backends map[string]*os.File
+	keysMu   sync.Mutex
+	keys     map[string]*keyLock
+	staged   map[string]stagedIdentity // guarded by keysMu
+	ops      fileOps
+}
+
+// dir is the objects directory of a backend ("" or unknown name: default).
+func (s *Filesystem) dir(backend string) (*os.File, error) {
+	if backend == "" {
+		return s.objects, nil
+	}
+	if d, ok := s.backends[backend]; ok {
+		return d, nil
+	}
+	return nil, ErrInvalidKey
+}
+
+// AddBackend opens another enabled_backends directory with the same
+// checks as the default one (owner, no group/other write, same device).
+func (s *Filesystem) AddBackend(name, path string) error {
+	dir, err := openDirectory(path)
+	if err != nil {
+		return err
+	}
+	var stat syscall.Stat_t
+	if syscall.Fstat(int(dir.Fd()), &stat) != nil || stat.Uid != uint32(os.Geteuid()) || stat.Mode&syscall.S_IFMT != syscall.S_IFDIR || stat.Mode&0022 != 0 {
+		_ = dir.Close()
+		return ErrUnsafe
+	}
+	if s.backends == nil {
+		s.backends = map[string]*os.File{}
+	}
+	s.backends[name] = dir
+	return nil
 }
 
 // final is the published name for a staged key name (<image>-<attempt>).
@@ -434,6 +466,9 @@ func (s *Filesystem) Close() error {
 	}
 	s.closed = true
 	var result error
+	for _, f := range s.backends {
+		_ = f.Close()
+	}
 	for _, f := range []*os.File{s.objects, s.staging, s.lock, s.root} {
 		if f != nil {
 			result = errors.Join(result, f.Close())
@@ -462,7 +497,11 @@ func (s *Filesystem) Stage(ctx context.Context, key Key, src io.Reader, limit in
 	if err = ctx.Err(); err != nil {
 		return Info{}, err
 	}
-	return s.stageDirect(ctx, name, src, limit, declared)
+	dir, err := s.dir(key.Backend)
+	if err != nil {
+		return Info{}, err
+	}
+	return s.stageDirect(ctx, dir, name, src, limit, declared)
 }
 
 // stage runs one per-chunk step (MD5, SHA-512 or the file write) on its own
@@ -613,7 +652,11 @@ func (s *Filesystem) Publish(ctx context.Context, key Key, expected Info) error 
 	if err = ctx.Err(); err != nil {
 		return err
 	}
-	return s.publishDirect(ctx, name, expected)
+	dir, err := s.dir(key.Backend)
+	if err != nil {
+		return err
+	}
+	return s.publishDirect(ctx, dir, name, expected)
 }
 
 func (s *Filesystem) Open(ctx context.Context, key Key) (ReadSeekCloser, Info, error) {
@@ -625,7 +668,11 @@ func (s *Filesystem) Open(ctx context.Context, key Key) (ReadSeekCloser, Info, e
 	if err = ctx.Err(); err != nil {
 		return nil, Info{}, err
 	}
-	f, err := openEntry(s.objects, s.final(name), syscall.O_RDONLY, 0)
+	objects, err := s.dir(key.Backend)
+	if err != nil {
+		return nil, Info{}, err
+	}
+	f, err := openEntry(objects, s.final(name), syscall.O_RDONLY, 0)
 	if errors.Is(err, syscall.ENOENT) {
 		return nil, Info{}, ErrNotFound
 	}
@@ -667,7 +714,11 @@ func (s *Filesystem) OpenStream(ctx context.Context, key Key) (ReadSeekCloser, i
 	if err = ctx.Err(); err != nil {
 		return nil, 0, err
 	}
-	f, err := openEntry(s.objects, s.final(name), syscall.O_RDONLY, 0)
+	objects, err := s.dir(key.Backend)
+	if err != nil {
+		return nil, 0, err
+	}
+	f, err := openEntry(objects, s.final(name), syscall.O_RDONLY, 0)
 	if errors.Is(err, syscall.ENOENT) {
 		return nil, 0, ErrNotFound
 	}
@@ -699,6 +750,21 @@ func (s *Filesystem) Delete(ctx context.Context, key Key) error {
 	// As glance_store's filesystem driver: unlink <image-id>, no directory
 	// fsync. Under heavy writeback an ext4 directory fsync waits for the whole
 	// journal and took longer than the request deadline (DELETE 409/503).
+	if key.Backend != "" { // one store's copy
+		dir, e := s.dir(key.Backend)
+		if e != nil {
+			return e
+		}
+		if e = s.ops.unlink(dir, s.final(name)); e != nil && !errors.Is(e, syscall.ENOENT) {
+			return opError("delete", e)
+		}
+		return nil
+	}
+	for _, dir := range s.backends { // the image's copies in other stores
+		if e := s.ops.unlink(dir, s.final(name)); e != nil && !errors.Is(e, syscall.ENOENT) {
+			return opError("delete", e)
+		}
+	}
 	if err = s.ops.unlink(s.objects, s.final(name)); err != nil && !errors.Is(err, syscall.ENOENT) {
 		return opError("delete", err)
 	}
@@ -716,9 +782,9 @@ func validHash(value string, length int) bool {
 // stageDirect writes the upload straight to <image-id> in the official
 // directory, as glance_store's filesystem driver does: no staging copy, no
 // fsync, and a failed write removes the partial file. The caller holds the key.
-func (s *Filesystem) stageDirect(ctx context.Context, name string, src io.Reader, limit int64, declared *int64) (info Info, result error) {
+func (s *Filesystem) stageDirect(ctx context.Context, objects *os.File, name string, src io.Reader, limit int64, declared *int64) (info Info, result error) {
 	final := s.final(name)
-	f, err := openEntry(s.objects, final, syscall.O_WRONLY|syscall.O_CREAT|syscall.O_EXCL, 0644)
+	f, err := openEntry(objects, final, syscall.O_WRONLY|syscall.O_CREAT|syscall.O_EXCL, 0644)
 	if errors.Is(err, syscall.EEXIST) {
 		return Info{}, ErrExists
 	}
@@ -731,7 +797,7 @@ func (s *Filesystem) stageDirect(ctx context.Context, name string, src io.Reader
 			result, info = opError("close image file", e), Info{}
 		}
 		if !ok || result != nil {
-			_ = s.ops.unlink(s.objects, final)
+			_ = s.ops.unlink(objects, final)
 		}
 	}()
 	if err = s.checkObject(f); err != nil {
@@ -753,8 +819,8 @@ func (s *Filesystem) stageDirect(ctx context.Context, name string, src io.Reader
 
 // publishDirect confirms the directly written file is still the staged one;
 // its final name already exists, so there is nothing to link.
-func (s *Filesystem) publishDirect(ctx context.Context, name string, expected Info) error {
-	f, err := openEntry(s.objects, s.final(name), syscall.O_RDONLY, 0)
+func (s *Filesystem) publishDirect(ctx context.Context, objects *os.File, name string, expected Info) error {
+	f, err := openEntry(objects, s.final(name), syscall.O_RDONLY, 0)
 	if errors.Is(err, syscall.ENOENT) {
 		return ErrIncomplete
 	}
@@ -772,5 +838,65 @@ func (s *Filesystem) publishDirect(ctx context.Context, name string, expected In
 		}
 	}
 	s.forgetStaged(name)
+	return nil
+}
+
+// Copy writes the image file of from (its backend) to backend to, as
+// copy-image: the destination is created exclusively, the bytes are hashed
+// on the way and a failed copy leaves no destination file.
+func (s *Filesystem) Copy(ctx context.Context, from Key, to string) (Info, error) {
+	name, leave, err := s.enter(ctx, from)
+	if err != nil {
+		return Info{}, err
+	}
+	defer leave()
+	src, err := s.dir(from.Backend)
+	if err != nil {
+		return Info{}, err
+	}
+	dst, err := s.dir(to)
+	if err != nil {
+		return Info{}, err
+	}
+	in, err := openEntry(src, s.final(name), syscall.O_RDONLY, 0)
+	if err != nil {
+		return Info{}, opError("copy", err)
+	}
+	defer in.Close()
+	out, err := openEntry(dst, s.final(name), syscall.O_WRONLY|syscall.O_CREAT|syscall.O_EXCL, 0644)
+	if err != nil {
+		if errors.Is(err, syscall.EEXIST) {
+			return Info{}, ErrExists
+		}
+		return Info{}, opError("copy", err)
+	}
+	// The upload's pipeline: write, MD5 and SHA-512 in parallel with the
+	// next read; the source must keep its size while copied.
+	var size int64
+	if st, e := in.Stat(); e == nil {
+		size = st.Size()
+	}
+	info, err := measure(ctx, in, func(b []byte) (int, error) { return s.ops.write(out, b) }, size, &size)
+	if e := out.Close(); err == nil {
+		err = e
+	}
+	if err != nil {
+		_ = s.ops.unlink(dst, s.final(name))
+		return Info{}, opError("copy", err)
+	}
+	return info, nil
+}
+
+// DeleteDefault removes only the default store's copy of an image (the
+// other stores keep theirs), for DELETE /v2/stores/{default}/{image}.
+func (s *Filesystem) DeleteDefault(ctx context.Context, key Key) error {
+	name, leave, err := s.enter(ctx, key)
+	if err != nil {
+		return err
+	}
+	defer leave()
+	if err = s.ops.unlink(s.objects, s.final(name)); err != nil && !errors.Is(err, syscall.ENOENT) {
+		return opError("delete", err)
+	}
 	return nil
 }

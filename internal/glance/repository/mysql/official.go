@@ -29,7 +29,7 @@ import (
 // was checked against; any other revision fails closed at startup.
 var SupportedOfficialRevisions = []string{"2024_1_contract01"}
 
-var officialTables = regexp.MustCompile(`\b(FROM|INTO|UPDATE|JOIN)\s+(images|image_properties|image_tags|image_locations)\b`)
+var officialTables = regexp.MustCompile(`\b(FROM|INTO|UPDATE|JOIN)\s+(images|image_properties|image_tags|image_locations|image_members|tasks|task_info|cached_images|node_reference|metadef_namespaces|metadef_objects|metadef_properties|metadef_tags|metadef_resource_types|metadef_namespace_resource_types)\b`)
 
 // officialNamespace derives the attempt ID of an adopted original upload.
 var officialNamespace = uuid.MustParse("6f1d1c64-6c2b-5b8e-9b0a-2f6f4d6e9a10")
@@ -94,6 +94,20 @@ func (r *Repository) ack(ctx context.Context, tx *sql.Tx, q string, args ...any)
 
 func (r *Repository) location(id string) string { return "file://" + r.official.storeDir + "/" + id }
 
+// storeLocation reports whether value is the image's file in one of the
+// stores (the default one, or any enabled backend).
+func (r *Repository) storeLocation(id, value string) bool {
+	if value == r.location(id) {
+		return true
+	}
+	for name := range r.backends {
+		if v, _ := r.locationFor(id, name); v == value {
+			return true
+		}
+	}
+	return false
+}
+
 // OfficialAttempt is the attempt ID adopted for an image the original uploaded.
 func OfficialAttempt(id string) string { return uuid.NewSHA1(officialNamespace, []byte(id)).String() }
 
@@ -101,7 +115,7 @@ func OfficialAttempt(id string) string { return uuid.NewSHA1(officialNamespace, 
 // with no bookkeeping row: verified sha512 metadata and exactly one active
 // location, the local file named by its ID. Anything else is not adopted.
 func (r *Repository) adoptable(ctx context.Context, tx *sql.Tx, s model.DataState) (*model.DataOperation, error) {
-	if s.Deleted || s.Status != "active" || s.Size == nil || s.Checksum == nil ||
+	if s.Deleted || (s.Status != "active" && s.Status != "deactivated") || s.Size == nil || s.Checksum == nil ||
 		s.HashAlgorithm == nil || *s.HashAlgorithm != "sha512" || s.HashValue == nil {
 		return nil, nil
 	}
@@ -121,7 +135,7 @@ func (r *Repository) adoptable(ctx context.Context, tx *sql.Tx, s model.DataStat
 	if err = errors.Join(rows.Err(), rows.Close()); err != nil {
 		return nil, err
 	}
-	if len(values) != 1 || values[0] != r.location(s.ImageID) {
+	if len(values) != 1 || !r.storeLocation(s.ImageID, values[0]) {
 		return nil, nil
 	}
 	o := model.DataOperation{ImageID: s.ImageID, AttemptID: OfficialAttempt(s.ImageID), Phase: model.DataCommitted,
@@ -168,6 +182,17 @@ func (r *Repository) destroyChildren(ctx context.Context, tx *sql.Tx, id string,
 			return err
 		}
 	}
+	// Members too (_image_member_delete_all), read first and updated by
+	// primary key for the same reason as locations.
+	members, err := r.ids(ctx, tx, "SELECT id FROM image_members WHERE image_id=? AND deleted=0", id)
+	if err != nil {
+		return err
+	}
+	for _, member := range members {
+		if _, err = r.exec(ctx, tx, "UPDATE image_members SET deleted=1, deleted_at=?, updated_at=? WHERE id=? AND deleted=0", at, at, member); err != nil {
+			return err
+		}
+	}
 	for _, q := range []string{
 		"UPDATE image_properties SET deleted=1, deleted_at=?, updated_at=? WHERE image_id=? AND deleted=0",
 		"UPDATE image_tags SET deleted=1, deleted_at=?, updated_at=? WHERE image_id=? AND deleted=0",
@@ -179,12 +204,29 @@ func (r *Repository) destroyChildren(ctx context.Context, tx *sql.Tx, id string,
 	return nil
 }
 
+func (r *Repository) ids(ctx context.Context, tx *sql.Tx, q string, args ...any) ([]int64, error) {
+	rows, err := r.query(ctx, tx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	var out []int64
+	for rows.Next() {
+		var id int64
+		if err = rows.Scan(&id); err != nil {
+			_ = rows.Close()
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, errors.Join(rows.Err(), rows.Close())
+}
+
 // AdoptOriginalUploads records, once at startup, the committed operation of
 // every active original upload that has none yet, so downloads no longer
 // look up its location on each request. Each image is adopted in its own
 // locking transaction with the same checks as on demand.
 func (r *Repository) AdoptOriginalUploads(ctx context.Context) (int, error) {
-	rows, err := r.db.QueryContext(ctx, r.sql("SELECT i.id FROM images i WHERE i.deleted=FALSE AND i.status='active' AND i.os_hash_algo='sha512'")+
+	rows, err := r.db.QueryContext(ctx, r.sql("SELECT i.id FROM images i WHERE i.deleted=FALSE AND i.status IN ('active','deactivated') AND i.os_hash_algo='sha512'")+
 		" AND NOT EXISTS (SELECT 1 FROM image_data_operations o WHERE o.image_id=i.id)")
 	if err != nil {
 		return 0, err

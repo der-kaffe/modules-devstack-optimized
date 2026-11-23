@@ -176,7 +176,13 @@ func (h *Handler) putFile(w http.ResponseWriter, r *http.Request) {
 		src = r.Body
 	}
 	bounded := &uploadReader{ctx: r.Context(), src: src, max: h.binary.MaxUploadBytes(), expected: expected}
-	_, err = h.binary.Upload(r.Context(), r.Context().Value(identityKey{}).(auth.Identity), r.PathValue("id"), bounded, expected)
+	who := r.Context().Value(identityKey{}).(auth.Identity)
+	if h.multi != nil {
+		// X-Image-Meta-Store chooses the backend (default_backend if absent).
+		_, err = h.multi.UploadTo(r.Context(), who, r.PathValue("id"), bounded, expected, r.Header.Get("X-Image-Meta-Store"))
+	} else {
+		_, err = h.binary.Upload(r.Context(), who, r.PathValue("id"), bounded, expected)
+	}
 	if err != nil {
 		h.binaryFailure(w, err)
 		return

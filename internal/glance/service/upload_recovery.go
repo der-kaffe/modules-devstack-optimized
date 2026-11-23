@@ -141,7 +141,7 @@ func (u *UploadCoordinator) RecoverUploads(ctx context.Context) (report UploadRe
 			if s.Deleted {
 				switch {
 				case cleanupFence(s, key, "deleted", model.DataCleanup):
-					if err = u.finishCleanup(ctx, s, "deleted"); err != nil {
+					if err = u.finishCleanup(ctx, s, "deleted", false); err != nil {
 						return report, err
 					}
 					report.Cleaned++
@@ -184,7 +184,7 @@ func (u *UploadCoordinator) RecoverUploads(ctx context.Context) (report UploadRe
 					return report, ErrUploadReconciliation
 				}
 				if cleanupFence(s, key, "killed", model.DataCleanup) {
-					if err = u.finishCleanup(ctx, s, "killed"); err != nil {
+					if err = u.finishCleanup(ctx, s, "killed", false); err != nil {
 						return report, err
 					}
 					report.Cleaned++
@@ -231,5 +231,5 @@ func (u *UploadCoordinator) releaseForeignDeletion(ctx context.Context, key stor
 	if err != nil {
 		return err
 	}
-	return u.finishCleanup(ctx, s, "deleted")
+	return u.finishCleanup(ctx, s, "deleted", false)
 }

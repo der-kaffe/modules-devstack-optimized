@@ -1,0 +1,100 @@
+#!/bin/bash
+# Glance in Go only: replaces DevStack's lib/glance functions so no Python
+# Glance is installed. Sourced from devstack/settings (the "source" phase,
+# after stack.sh sourced lib/glance), so these definitions win for every
+# later call of stack.sh, unstack.sh and clean.sh.
+#
+# Each function does what lib/glance does, with Glance Go:
+#   install_glance          build Glance Go and its tools (no git clone, no pip)
+#   configure_glance        the same glance-api.conf keys DevStack writes
+#   create_glance_accounts  service user, image service/endpoint, Keystone limits
+#   init_glance             catalog schema and metadefs with glance-manage (Go)
+#   start_glance            devstack@g-go behind Apache /image
+#   stop_glance             stop it
+
+function install_glance {
+    install_glance_go
+    # The original's command-line tools, by name.
+    local tool
+    for tool in glance-manage glance-cache-pruner glance-cache-cleaner glance-scrubber; do
+        sudo ln -sf "$GLANCE_GO_DIR/bin/$tool" "/usr/local/bin/$tool"
+    done
+}
+
+function configure_glance {
+    sudo install -d -o $STACK_USER $GLANCE_CONF_DIR $GLANCE_METADEF_DIR
+
+    local dburl
+    dburl=$(database_connection_url glance)
+
+    iniset $GLANCE_API_CONF DEFAULT debug $ENABLE_DEBUG_LOG_LEVEL
+    iniset $GLANCE_API_CONF database connection $dburl
+    iniset $GLANCE_API_CONF DEFAULT use_syslog $SYSLOG
+    iniset $GLANCE_API_CONF DEFAULT image_cache_dir $GLANCE_CACHE_DIR/
+    iniset $GLANCE_API_CONF DEFAULT image_cache_driver $GLANCE_CACHE_DRIVER
+    iniset $GLANCE_API_CONF oslo_concurrency lock_path $GLANCE_LOCK_DIR
+    iniset $GLANCE_API_CONF paste_deploy flavor keystone+cachemanagement
+    configure_keystone_authtoken_middleware $GLANCE_API_CONF glance
+    iniset $GLANCE_API_CONF oslo_messaging_notifications driver messagingv2
+    iniset_rpc_backend glance $GLANCE_API_CONF
+    iniset $GLANCE_API_CONF DEFAULT show_image_direct_url $GLANCE_SHOW_DIRECT_URL
+    iniset $GLANCE_API_CONF DEFAULT show_multiple_locations $GLANCE_SHOW_MULTIPLE_LOCATIONS
+    iniset $GLANCE_API_CONF image_format require_image_format_match $GLANCE_ENFORCE_IMAGE_FORMAT
+    iniset $GLANCE_API_CONF glance_store filesystem_store_datadir $GLANCE_IMAGE_DIR/
+    iniset $GLANCE_API_CONF cors allowed_origin "${GLANCE_CORS_ALLOWED_ORIGIN:-http://$SERVICE_HOST}"
+    iniset $GLANCE_API_CONF DEFAULT public_endpoint $GLANCE_URL
+    setup_logging $GLANCE_API_CONF
+
+    iniset $GLANCE_CACHE_CONF DEFAULT debug $ENABLE_DEBUG_LOG_LEVEL
+    iniset $GLANCE_CACHE_CONF DEFAULT use_syslog $SYSLOG
+    iniset $GLANCE_CACHE_CONF DEFAULT image_cache_dir $GLANCE_CACHE_DIR/
+    iniset $GLANCE_CACHE_CONF DEFAULT image_cache_driver $GLANCE_CACHE_DRIVER
+    iniset $GLANCE_CACHE_CONF glance_store filesystem_store_datadir $GLANCE_IMAGE_DIR/
+
+    iniset $GLANCE_IMAGE_IMPORT_CONF image_import_opts image_import_plugins "[]"
+    iniset $GLANCE_IMAGE_IMPORT_CONF inject_metadata_properties ignore_user_roles admin
+    iniset $GLANCE_IMAGE_IMPORT_CONF inject_metadata_properties inject
+
+    # The original's etc/metadefs files, embedded in Glance Go.
+    "$GLANCE_GO_BIN" install-metadefs $GLANCE_METADEF_DIR
+
+    # Glance Go itself is the worker this URL names (distributed import).
+    iniset $GLANCE_API_CONF DEFAULT worker_self_reference_url "http://$GLANCE_GO_LISTEN"
+
+    if [[ "$GLANCE_ENFORCE_NEW_DEFAULTS" == True || "$ENFORCE_NEW_DEFAULTS" == True ]] ; then
+        iniset $GLANCE_API_CONF oslo_policy enforce_new_defaults true
+        iniset $GLANCE_API_CONF DEFAULT enforce_secure_rbac true
+    else
+        iniset $GLANCE_API_CONF oslo_policy enforce_new_defaults false
+        iniset $GLANCE_API_CONF DEFAULT enforce_secure_rbac false
+    fi
+}
+
+function create_glance_accounts {
+    # Cinder needs service and admin roles to read images, as with g-api.
+    create_service_user "glance" "admin"
+    get_or_create_service "glance" "image" "Glance Image Service"
+    get_or_create_endpoint "image" "$REGION_NAME" "$GLANCE_URL"
+    if [[ "$GLANCE_ENABLE_QUOTAS" = True ]]; then
+        configure_glance_quotas
+    fi
+}
+
+function init_glance {
+    rm -rf $GLANCE_IMAGE_DIR
+    mkdir -p $GLANCE_IMAGE_DIR $GLANCE_CACHE_DIR $GLANCE_LOCK_DIR
+    recreate_database glance
+    time_start "dbsync"
+    /usr/local/bin/glance-manage --config-file $GLANCE_CONF_DIR/glance-api.conf db_sync
+    /usr/local/bin/glance-manage --config-file $GLANCE_CONF_DIR/glance-api.conf db_load_metadefs
+    time_stop "dbsync"
+    configure_glance_go
+}
+
+function start_glance {
+    start_glance_go
+}
+
+function stop_glance {
+    stop_process g-go
+}

@@ -42,6 +42,9 @@ type Backend interface {
 type Key struct {
 	ImageID   string
 	AttemptID string
+	// Backend names one of enabled_backends ("": the default store; for
+	// Delete, every store).
+	Backend string
 }
 
 func canonicalID(value string) (string, error) {
