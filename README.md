@@ -9,18 +9,6 @@ Reimplementación en Go de dos servicios de OpenStack, **Glance** (imágenes) y 
 - Se instalan como un **plugin de DevStack** (`enable_plugin`) y se miden contra los servicios originales bajo las mismas condiciones: misma ruta de Apache, mismo MySQL, mismo Keystone.
 - Cada comportamiento se verifica contra el servicio original antes de darlo por bueno: pruebas con `-race`, integración con MySQL real y comparación diferencial con el servicio vivo.
 
-## Acerca de
-
-El proyecto evalúa, con datos y no por suposición, si una reimplementación acotada en Go de Glance y Placement mantiene la compatibilidad funcional y mejora latencia, rendimiento, CPU y memoria. No asume que Python sea lento: los resultados desfavorables a Go se reportan igual.
-
-| | |
-|---|---|
-| **Glance en Go** | Juan Cárdenas Uribe |
-| **Placement en Go** | Paolo Castañon Barrera |
-| **Profesor guía** | Alejandro Mellado Gatica |
-| **Lenguaje** | Go (binarios estáticos, sin dependencias de Python) |
-| **Entorno** | DevStack 2026.2 sobre Ubuntu 24.04, en una VM de laboratorio |
-
 ## Estado
 
 - **Glance Go:** catálogo (crear, listar, ver, editar, borrar), subida y descarga, autenticación Keystone con caché de tokens, notificaciones `image.*` y plugin de DevStack que sustituye a `g-api` por `g-go`. Detalle en [`docs/glance/`](docs/glance/replace-original.md) y [`docs/glance/devstack-plugin.md`](docs/glance/devstack-plugin.md).
