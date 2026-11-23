@@ -1,59 +1,70 @@
 # modules-devstack-optimized
 
-Trabajo de Título: análisis y futura reimplementación acotada de OpenStack Placement y Glance en Go. El [estado de Sprint 2](docs/sprint2/README.md), la [matriz de evidencia](docs/sprint2/sprint2-evidence.md) y el [informe](docs/sprint2/informe_etapa2.pdf) distinguen diseño preparado de validación real.
+Reimplementación en Go de dos servicios de OpenStack, **Glance** (imágenes) y **Placement** (inventario de recursos), compatibles con los originales en Python. Trabajo de Título INFO-1197, Universidad Católica de Temuco.
 
-## Estado y forma de trabajo
+## Resumen
 
-El laboratorio y el análisis de Sprint 2 están aceptados. El catálogo Glance Go B20 (Entregas A y B) está implementado; su alcance y validación se detallan en la documentación de cada entrega. B25 tiene componentes y [arranque operativo](docs/glance/b25-operations.md) implementados con regresiones locales y suites opt-in para comprobar MySQL 8/002 y la integración binaria. Placement [B07 está implementado y validado](docs/placement/b07-acceptance.md) para providers/inventories 1.0, con MySQL/Keystone reales y 57/57 comparaciones estrictas; su entrega fue integrada mediante el PR #6. [B08](docs/placement/b08-development.md) añade catálogos y asociaciones classes/traits, con 82/82 comparaciones estrictas y regresión B07 57/57. El [plan por fases](PLANS.md), las [instrucciones para agentes](AGENTS.md) y el [registro de resultados](harness/build-log.md) permiten continuar con contexto y criterios verificables.
+- **Glance Go** reemplaza al servicio de imágenes de OpenStack con el mismo catálogo MySQL, el mismo directorio de imágenes y el mismo `glance-api.conf`. Nova, Horizon y la CLI no notan el cambio.
+- **Placement Go** reimplementa providers, inventories, clases, traits, allocations y candidates del perfil plano, comparados respuesta por respuesta contra Placement Python.
+- Se instalan como un **plugin de DevStack** (`enable_plugin`) y se miden contra los servicios originales bajo las mismas condiciones: misma ruta de Apache, mismo MySQL, mismo Keystone.
+- Cada comportamiento se verifica contra el servicio original antes de darlo por bueno: pruebas con `-race`, integración con MySQL real y comparación diferencial con el servicio vivo.
 
-```bash
-make check           # Verificación local; no inicia la VM ni contacta OpenStack
-make harness-status  # Inventario Go y referencia al estado aceptado
+## Acerca de
+
+El proyecto evalúa, con datos y no por suposición, si una reimplementación acotada en Go de Glance y Placement mantiene la compatibilidad funcional y mejora latencia, rendimiento, CPU y memoria. No asume que Python sea lento: los resultados desfavorables a Go se reportan igual.
+
+| | |
+|---|---|
+| **Glance en Go** | Juan Cárdenas Uribe |
+| **Placement en Go** | Paolo Castañon Barrera |
+| **Profesor guía** | Alejandro Mellado Gatica |
+| **Lenguaje** | Go (binarios estáticos, sin dependencias de Python) |
+| **Entorno** | DevStack 2026.2 sobre Ubuntu 24.04, en una VM de laboratorio |
+
+## Estado
+
+- **Glance Go:** catálogo (crear, listar, ver, editar, borrar), subida y descarga, autenticación Keystone con caché de tokens, notificaciones `image.*` y plugin de DevStack que sustituye a `g-api` por `g-go`. Detalle en [`docs/glance/`](docs/glance/replace-original.md) y [`docs/glance/devstack-plugin.md`](docs/glance/devstack-plugin.md).
+- **Placement Go:** providers, inventories, clases y traits, allocations con generation y consumers, candidates del perfil plano y políticas de Keystone. Detalle en [`docs/placement/`](docs/placement/b07-acceptance.md).
+- **En curso (pull requests abiertas):** la API v2 completa de Glance (miembros, tareas, importación, metadefs, caché, cuotas, políticas, varios stores) con `glance-manage`, `glance-cache-pruner`, `glance-cache-cleaner` y `glance-scrubber` también en Go, y la instalación por defecto sin nada de Glance en Python.
+
+## Uso rápido
+
+En `local.conf` de un DevStack (siempre en la VM de laboratorio, nunca en la estación de trabajo):
+
+```ini
+[[local|localrc]]
+enable_plugin glance-go https://github.com/PaoloCastanon/modules-devstack-optimized main
 ```
 
-`make check` requiere Python 3, Make, Bash, ShellCheck, Terraform y Ansible. Ejecuta sintaxis/lint de scripts, navegación del harness, pruebas de los gates, evidencia S2 archivada, formato Terraform y sintaxis Ansible. Cuando exista código Go, exige también Go/gofmt, formato, vet, tests con race detector y build. Sin código Go, muestra `PENDING Go`; pasar los controles locales no acredita servicios reimplementados.
+Desarrollo local, sin iniciar la VM ni contactar OpenStack:
 
-También ejecuta explícitamente la suite `tests/unit` y la regresión aislada `tests/compatibility/nova_pin.sh` cuando estén presentes; si faltan en la revisión actual, lo informa. Las pruebas MySQL requieren PyYAML y usan dobles: no conectan a la VM ni a una base de datos.
+```bash
+make check          # formato, vet, pruebas con -race, build y chequeos del harness
+make glance-build   # compila cmd/glance
+make placement-build
+```
 
-`make docs-check` conserva la validación documental existente. `make evidence-check` valida las capturas históricas de DevStack, baseline y boot. `make sprint2-verify` puede verificar servicios vivos si encuentra `OS_AUTH_URL` u openrc: usarlo sólo en el laboratorio. La [guía de laboratorio](infra/devstack/README.md) es para una VM Ubuntu 24.04 dedicada. No ejecutar DevStack en la estación de trabajo.
+`make check` necesita Python 3, Make, Bash, ShellCheck, Terraform, Ansible y Go.
 
-La VM permanece apagada mientras no se use. Los informes de S2 reflejan la entrega del 2 de octubre; las verificaciones locales posteriores no prueban disponibilidad actual del laboratorio.
+## Estructura
 
-El [workflow de CI](.github/workflows/verify.yml) ejecuta los mismos controles en pushes a `main`, pull requests y ejecución manual. Usa permisos de lectura y no requiere credenciales del laboratorio. Un fallo marca el check como fallido; configurar protección de rama en GitHub es una tarea administrativa aparte.
+| Ruta | Contenido |
+|---|---|
+| `cmd/glance`, `cmd/placement` | Los ejecutables de cada servicio |
+| `internal/glance`, `internal/placement` | Dominio, API, servicio, repositorio MySQL y store; separados por capas, sin importarse entre sí |
+| `internal/auth`, `internal/config` | Keystone y lectura de `glance-api.conf` / `placement.conf`, compartidos |
+| `devstack/` | Plugin `glance-go` para `enable_plugin` |
+| `infra/` | Laboratorio: Terraform, Ansible y guía de DevStack |
+| `scripts/`, `tests/` | Pruebas de integración, comparación diferencial y arnés de campañas |
+| `docs/` | Diseño, decisiones y guías de cada servicio |
+| `harness/` | Registro fechado de cada verificación (`build-log.md`) |
 
-## Glance Go — B20
+## Documentación
 
-La [Entrega A](docs/glance/development.md) implementa creación y consulta
-de metadatos con MySQL y autenticación Keystone.
+- [Plan por fases](PLANS.md) y [reglas para agentes](AGENTS.md)
+- [Arquitectura objetivo](docs/sprint2/go-target-architecture.md) y [decisiones de diseño](docs/sprint2/design-decisions.md)
+- [Estrategia de compatibilidad](docs/sprint2/compatibility-strategy.md)
+- [Registro de verificaciones](harness/build-log.md)
+- [Guía del laboratorio](infra/devstack/README.md)
 
-La [Entrega B](docs/glance/b20-catalog.md) añade listado paginado,
-JSON Patch, borrado lógico y esquemas de metadatos.
-
-Ambas entregas tienen pruebas locales. La documentación acredita integración real
-para A y mantiene pendiente la validación operativa de las nuevas rutas B.
-La transferencia binaria y su arranque operativo se implementan en B25;
-su guía separa las regresiones locales de las verificaciones reales.
-La integración Nova y la comparación de rendimiento no se acreditan
-mediante los controles locales.
-
-## Placement Go — B07–B12 priorizados
-
-La [guía B07](docs/placement/b07-development.md) describe CRUD de providers,
-inventories con generation, esquema MySQL aislado y autenticación Keystone.
-Incluye fixtures S2, suites opt-in con MySQL real y [campaña de cierre](evidence/sprint3/placement/b07-close-20261029/README.md):
-**57/57** respuestas estrictas, status y estados coinciden con Placement Python
-y Keystone reales. [B08](docs/placement/b08-development.md) añade catálogos estándar
-y CUSTOM, traits por provider y cambios seleccionados 1.1–1.7: **82/82**
-comparaciones estrictas, upgrade v3 y persistencia tras reinicio.
-[B09-A](docs/placement/b09-development.md) añade allocations atómicas, usages y
-capacidad restante, con **60/60** comparaciones estrictas. Default 1.0;
-el rango se limita a las rutas seleccionadas. El cierre B09 permite negociar hasta 1.36 en allocations e incorpora consumer generation,
-con **24/24** casos adicionales. [B10](docs/placement/b10-development.md) incorpora
-candidates del perfil plano, con **44/44** comparaciones y las versiones del tracker
-verificadas por ruta. [B11](docs/placement/b11-acceptance.md) valida durabilidad, aislamiento y restore (9/9). [B12](docs/placement/b12-acceptance.md) cierra Keystone/políticas con 143/143 casos;
-la integración Nova conserva sus tareas posteriores. La asociación positiva de aggregates
-se verificó en MySQL aislado, fuera de la comparación viva.
-[Alcance aceptado y límites](docs/placement/b07-acceptance.md).
-`make placement-build` compila el ejecutable; `make check` verifica ambos módulos
-sin iniciar el laboratorio. La guía distingue los resultados reales y los fixtures
-de identidad utilizados en las pruebas.
+La VM `tt-openstack-lab` permanece apagada mientras no se usa. Que pasen los controles locales no acredita por sí solo la disponibilidad del laboratorio.
