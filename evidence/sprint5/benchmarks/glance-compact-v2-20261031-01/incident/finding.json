@@ -1,0 +1,17 @@
+{
+  "stage": "failed official attempt, not accepted",
+  "valid_windows": 76,
+  "attempted_windows": 77,
+  "source": "80fcd1f5e8c3d20c9f165c472310c49d6b3f883c",
+  "original_python_sha": "a3e5f490b7a28b1161714c94acffe5308d24b567",
+  "original_notification_driver": "messagingv2",
+  "original_limit_nofile": 2048,
+  "symptom": "Python HTTP200 zero bytes while expected1048576; errno24 too many open files in cached image read",
+  "python_pids_stable": true,
+  "storage_aborted": false,
+  "cleanup": true,
+  "controls_restored": true,
+  "vm": "shut off",
+  "hypothesis": "per cached-request notifier creates new messaging transport; confirm FD/socket growth under original and runtime noop before new pilot",
+  "raw_private_journal": "/tmp/glance-incident-20261031-01/journal-private.log"
+}

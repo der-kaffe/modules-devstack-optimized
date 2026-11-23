@@ -1,0 +1,160 @@
+{
+  "schema": 1,
+  "run_id": "catalog-lifecycle-c01-r01-go",
+  "scenario": "catalog-lifecycle",
+  "implementation": "go",
+  "concurrency": 1,
+  "planned_duration_s": 4,
+  "warmup_s": 1,
+  "load_model": "closed-loop; one cycle per worker",
+  "drain": "complete cycle started before deadline; denominator includes entire cycle drain",
+  "latency_boundary": "before send through complete response; validation/logging outside request latency",
+  "seed_scope": "selected metadata fields, image identity/state, complete payload bytes and hashes",
+  "valid": true,
+  "warmup": {
+    "start_utc": "2026-10-31T16:24:17.843319+00:00",
+    "end_utc": "2026-10-31T16:24:18.926516+00:00",
+    "elapsed_s": 1.083197492,
+    "requests": 90,
+    "correct": 90,
+    "errors": 0,
+    "cycles": 15,
+    "correct_ops_s": 83.08734156485657,
+    "complete_cycles_s": 13.847890260809429,
+    "validated_payload_bytes": 0,
+    "validated_payload_mib_s": 0.0,
+    "latency_ms": {
+      "p50": 11.600457,
+      "p95": 18.658332,
+      "p99": 19.80463
+    },
+    "p99_tail_supported": false,
+    "failed": false
+  },
+  "measurement": {
+    "start_utc": "2026-10-31T16:24:18.927876+00:00",
+    "end_utc": "2026-10-31T16:24:22.928546+00:00",
+    "elapsed_s": 4.000670055,
+    "requests": 318,
+    "correct": 318,
+    "errors": 0,
+    "cycles": 53,
+    "correct_ops_s": 79.48668488733946,
+    "complete_cycles_s": 13.247780814556577,
+    "validated_payload_bytes": 0,
+    "validated_payload_mib_s": 0.0,
+    "latency_ms": {
+      "p50": 12.28265,
+      "p95": 18.823426,
+      "p99": 21.169423
+    },
+    "p99_tail_supported": false,
+    "failed": false
+  },
+  "cleanup_errors": [],
+  "pending_images": [],
+  "cleanup_ok": true,
+  "external_abort": false,
+  "host_storage": {
+    "filesystem_path": "/var/lib/libvirt/images",
+    "minimum_required_bytes": 10737418240,
+    "minimum_observed_free_bytes": 39895773184,
+    "aborted": false,
+    "poll_interval_s": 2
+  },
+  "guest_storage": {
+    "samples": [
+      {
+        "free_bytes": 46878703616,
+        "store_bytes": 61,
+        "utc": "2026-10-31T16:24:17.842140+00:00"
+      },
+      {
+        "free_bytes": 46877261824,
+        "store_bytes": 61,
+        "utc": "2026-10-31T16:24:21.065412+00:00"
+      }
+    ],
+    "aborted": false
+  },
+  "generator_cpu_seconds": 0.17000000000000048,
+  "generator_max_rss_bytes_process_lifetime": 41455616,
+  "host_load_average": {
+    "before": [
+      4.5029296875,
+      4.32080078125,
+      3.02587890625
+    ],
+    "after": [
+      4.46240234375,
+      4.3154296875,
+      3.03125
+    ]
+  },
+  "clocks": {
+    "before": {
+      "best": {
+        "rtt_ns": 157500,
+        "remote_minus_host_ns": 585729
+      },
+      "probes": [
+        {
+          "rtt_ns": 601198,
+          "remote_minus_host_ns": 698195
+        },
+        {
+          "rtt_ns": 239662,
+          "remote_minus_host_ns": 567028
+        },
+        {
+          "rtt_ns": 157500,
+          "remote_minus_host_ns": 585729
+        },
+        {
+          "rtt_ns": 185245,
+          "remote_minus_host_ns": 530015
+        },
+        {
+          "rtt_ns": 468783,
+          "remote_minus_host_ns": 602990
+        }
+      ]
+    },
+    "after": {
+      "best": {
+        "rtt_ns": 86060,
+        "remote_minus_host_ns": 965396
+      },
+      "probes": [
+        {
+          "rtt_ns": 313580,
+          "remote_minus_host_ns": 1031281
+        },
+        {
+          "rtt_ns": 129590,
+          "remote_minus_host_ns": 971125
+        },
+        {
+          "rtt_ns": 95457,
+          "remote_minus_host_ns": 967820
+        },
+        {
+          "rtt_ns": 86060,
+          "remote_minus_host_ns": 965396
+        },
+        {
+          "rtt_ns": 138152,
+          "remote_minus_host_ns": 935225
+        }
+      ]
+    }
+  },
+  "clock_drift_ns": 379667,
+  "clock_valid": true,
+  "post_state": {
+    "removed": true,
+    "seed_state_equal": true,
+    "roundtrip_after": null,
+    "own_tag_empty": true
+  }
+}

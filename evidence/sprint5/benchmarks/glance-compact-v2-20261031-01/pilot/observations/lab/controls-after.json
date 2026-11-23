@@ -1,0 +1,84 @@
+{
+  "original_units": {
+    "apt-daily.timer": {
+      "LoadState": "loaded",
+      "ActiveState": "active",
+      "UnitFileState": "enabled"
+    },
+    "apt-daily-upgrade.timer": {
+      "LoadState": "loaded",
+      "ActiveState": "active",
+      "UnitFileState": "enabled"
+    },
+    "apt-daily.service": {
+      "LoadState": "loaded",
+      "ActiveState": "inactive",
+      "UnitFileState": "static"
+    },
+    "apt-daily-upgrade.service": {
+      "LoadState": "loaded",
+      "ActiveState": "inactive",
+      "UnitFileState": "static"
+    }
+  },
+  "masked_by_session": [
+    "apt-daily.timer",
+    "apt-daily-upgrade.timer",
+    "apt-daily.service",
+    "apt-daily-upgrade.service"
+  ],
+  "journal_config": "/run/systemd/journald.conf.d/tt-placement-benchmark-8c0217c64c50.conf",
+  "controls_restored": true,
+  "runtime_only": true,
+  "log_limits_bytes": {
+    "/var/log/syslog": 134217728,
+    "/var/log/apache2/horizon_access.log": 67108864
+  },
+  "journal_system_max_bytes": 268435456,
+  "retention": "operational logs only; request samples retained separately",
+  "installed_utc": "2026-10-31T16:19:43.802083+00:00",
+  "effective_units": {
+    "apt-daily.timer": {
+      "LoadState": "masked",
+      "ActiveState": "failed",
+      "UnitFileState": "masked-runtime"
+    },
+    "apt-daily-upgrade.timer": {
+      "LoadState": "masked",
+      "ActiveState": "failed",
+      "UnitFileState": "masked-runtime"
+    },
+    "apt-daily.service": {
+      "LoadState": "masked",
+      "ActiveState": "inactive",
+      "UnitFileState": "masked-runtime"
+    },
+    "apt-daily-upgrade.service": {
+      "LoadState": "masked",
+      "ActiveState": "inactive",
+      "UnitFileState": "masked-runtime"
+    }
+  },
+  "effective_after_restore": {
+    "apt-daily.timer": {
+      "LoadState": "loaded",
+      "ActiveState": "active",
+      "UnitFileState": "enabled"
+    },
+    "apt-daily-upgrade.timer": {
+      "LoadState": "loaded",
+      "ActiveState": "active",
+      "UnitFileState": "enabled"
+    },
+    "apt-daily.service": {
+      "LoadState": "loaded",
+      "ActiveState": "inactive",
+      "UnitFileState": "static"
+    },
+    "apt-daily-upgrade.service": {
+      "LoadState": "loaded",
+      "ActiveState": "inactive",
+      "UnitFileState": "static"
+    }
+  }
+}

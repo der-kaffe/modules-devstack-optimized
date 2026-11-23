@@ -1,0 +1,358 @@
+{
+  "valid": true,
+  "cleanup": true,
+  "stage": "functional-preflight; not benchmark results",
+  "cleanup_report": {
+    "original_unchanged": true,
+    "private_root_removed": true,
+    "runtime_removed": true,
+    "identity_removed": true,
+    "controls_restored": true,
+    "original_services_active": {
+      "devstack@placement-api.service": true,
+      "devstack@g-api.service": true,
+      "devstack@n-cpu.service": true,
+      "devstack@n-sch.service": true,
+      "devstack@keystone.service": true
+    },
+    "pending_images": 0
+  },
+  "cases": [
+    {
+      "method": "GET",
+      "path": "/v2/images?limit=1000",
+      "status": 200,
+      "expected": 200,
+      "bytes": 1056,
+      "error_kind": null
+    },
+    {
+      "method": "GET",
+      "path": "/v2/images/98d334e7-06f9-4a92-b986-4e2a4b3c4f63",
+      "status": 404,
+      "expected": 404,
+      "bytes": 79,
+      "error_kind": null
+    },
+    {
+      "method": "POST",
+      "path": "/v2/images",
+      "status": 201,
+      "expected": 201,
+      "bytes": 691,
+      "error_kind": null
+    },
+    {
+      "method": "PUT",
+      "path": "/v2/images/98d334e7-06f9-4a92-b986-4e2a4b3c4f63/file",
+      "status": 204,
+      "expected": 204,
+      "bytes": 0,
+      "error_kind": null
+    },
+    {
+      "method": "GET",
+      "path": "/v2/images/98d334e7-06f9-4a92-b986-4e2a4b3c4f63",
+      "status": 200,
+      "expected": 200,
+      "bytes": 857,
+      "error_kind": null
+    },
+    {
+      "method": "GET",
+      "path": "/v2/images/98d334e7-06f9-4a92-b986-4e2a4b3c4f63/file",
+      "status": 200,
+      "expected": 200,
+      "bytes": 1048576,
+      "error_kind": null
+    },
+    {
+      "method": "PATCH",
+      "path": "/v2/images/98d334e7-06f9-4a92-b986-4e2a4b3c4f63",
+      "status": 200,
+      "expected": 200,
+      "bytes": 865,
+      "error_kind": null
+    },
+    {
+      "method": "DELETE",
+      "path": "/v2/images/98d334e7-06f9-4a92-b986-4e2a4b3c4f63",
+      "status": 204,
+      "expected": 204,
+      "bytes": 0,
+      "error_kind": null
+    },
+    {
+      "method": "GET",
+      "path": "/v2/images/98d334e7-06f9-4a92-b986-4e2a4b3c4f63",
+      "status": 404,
+      "expected": 404,
+      "bytes": 79,
+      "error_kind": null
+    },
+    {
+      "method": "GET",
+      "path": "/v2/images/d7e9d16c-88ff-428b-bc29-b0c1d01e04df",
+      "status": 404,
+      "expected": 404,
+      "bytes": 155,
+      "error_kind": null
+    },
+    {
+      "method": "POST",
+      "path": "/v2/images",
+      "status": 201,
+      "expected": 201,
+      "bytes": 652,
+      "error_kind": null
+    },
+    {
+      "method": "PUT",
+      "path": "/v2/images/d7e9d16c-88ff-428b-bc29-b0c1d01e04df/file",
+      "status": 204,
+      "expected": 204,
+      "bytes": 0,
+      "error_kind": null
+    },
+    {
+      "method": "GET",
+      "path": "/v2/images/d7e9d16c-88ff-428b-bc29-b0c1d01e04df",
+      "status": 200,
+      "expected": 200,
+      "bytes": 818,
+      "error_kind": null
+    },
+    {
+      "method": "GET",
+      "path": "/v2/images/d7e9d16c-88ff-428b-bc29-b0c1d01e04df/file",
+      "status": 200,
+      "expected": 200,
+      "bytes": 1048576,
+      "error_kind": null
+    },
+    {
+      "method": "PATCH",
+      "path": "/v2/images/d7e9d16c-88ff-428b-bc29-b0c1d01e04df",
+      "status": 200,
+      "expected": 200,
+      "bytes": 826,
+      "error_kind": null
+    },
+    {
+      "method": "DELETE",
+      "path": "/v2/images/d7e9d16c-88ff-428b-bc29-b0c1d01e04df",
+      "status": 204,
+      "expected": 204,
+      "bytes": 0,
+      "error_kind": null
+    },
+    {
+      "method": "GET",
+      "path": "/v2/images/d7e9d16c-88ff-428b-bc29-b0c1d01e04df",
+      "status": 404,
+      "expected": 404,
+      "bytes": 155,
+      "error_kind": null
+    },
+    {
+      "method": "GET",
+      "path": "/v2/images/8c18d6f8-a415-4a19-90f4-ea43e4af6a67",
+      "status": 404,
+      "expected": 404,
+      "bytes": 155,
+      "error_kind": null
+    },
+    {
+      "method": "POST",
+      "path": "/v2/images",
+      "status": 201,
+      "expected": 201,
+      "bytes": 653,
+      "error_kind": null
+    },
+    {
+      "method": "PUT",
+      "path": "/v2/images/8c18d6f8-a415-4a19-90f4-ea43e4af6a67/file",
+      "status": 204,
+      "expected": 204,
+      "bytes": 0,
+      "error_kind": null
+    },
+    {
+      "method": "GET",
+      "path": "/v2/images/8c18d6f8-a415-4a19-90f4-ea43e4af6a67",
+      "status": 200,
+      "expected": 200,
+      "bytes": 821,
+      "error_kind": null
+    },
+    {
+      "method": "GET",
+      "path": "/v2/images/8c18d6f8-a415-4a19-90f4-ea43e4af6a67/file",
+      "status": 200,
+      "expected": 200,
+      "bytes": 16777216,
+      "error_kind": null
+    },
+    {
+      "method": "PATCH",
+      "path": "/v2/images/8c18d6f8-a415-4a19-90f4-ea43e4af6a67",
+      "status": 200,
+      "expected": 200,
+      "bytes": 829,
+      "error_kind": null
+    },
+    {
+      "method": "DELETE",
+      "path": "/v2/images/8c18d6f8-a415-4a19-90f4-ea43e4af6a67",
+      "status": 204,
+      "expected": 204,
+      "bytes": 0,
+      "error_kind": null
+    },
+    {
+      "method": "GET",
+      "path": "/v2/images/8c18d6f8-a415-4a19-90f4-ea43e4af6a67",
+      "status": 404,
+      "expected": 404,
+      "bytes": 155,
+      "error_kind": null
+    },
+    {
+      "method": "GET",
+      "path": "/v2/images/5cbafd8f-c237-43c7-953c-651310f1d8b5",
+      "status": 404,
+      "expected": 404,
+      "bytes": 155,
+      "error_kind": null
+    },
+    {
+      "method": "POST",
+      "path": "/v2/images",
+      "status": 201,
+      "expected": 201,
+      "bytes": 653,
+      "error_kind": null
+    },
+    {
+      "method": "PUT",
+      "path": "/v2/images/5cbafd8f-c237-43c7-953c-651310f1d8b5/file",
+      "status": 204,
+      "expected": 204,
+      "bytes": 0,
+      "error_kind": null
+    },
+    {
+      "method": "GET",
+      "path": "/v2/images/5cbafd8f-c237-43c7-953c-651310f1d8b5",
+      "status": 200,
+      "expected": 200,
+      "bytes": 821,
+      "error_kind": null
+    },
+    {
+      "method": "GET",
+      "path": "/v2/images/5cbafd8f-c237-43c7-953c-651310f1d8b5/file",
+      "status": 200,
+      "expected": 200,
+      "bytes": 67108864,
+      "error_kind": null
+    },
+    {
+      "method": "PATCH",
+      "path": "/v2/images/5cbafd8f-c237-43c7-953c-651310f1d8b5",
+      "status": 200,
+      "expected": 200,
+      "bytes": 829,
+      "error_kind": null
+    },
+    {
+      "method": "DELETE",
+      "path": "/v2/images/5cbafd8f-c237-43c7-953c-651310f1d8b5",
+      "status": 204,
+      "expected": 204,
+      "bytes": 0,
+      "error_kind": null
+    },
+    {
+      "method": "GET",
+      "path": "/v2/images/5cbafd8f-c237-43c7-953c-651310f1d8b5",
+      "status": 404,
+      "expected": 404,
+      "bytes": 155,
+      "error_kind": null
+    },
+    {
+      "method": "GET",
+      "path": "/v2/images/74d971ed-b27e-47c4-9d13-fea2ba380078",
+      "status": 404,
+      "expected": 404,
+      "bytes": 155,
+      "error_kind": null
+    },
+    {
+      "method": "POST",
+      "path": "/v2/images",
+      "status": 201,
+      "expected": 201,
+      "bytes": 652,
+      "error_kind": null
+    },
+    {
+      "method": "PUT",
+      "path": "/v2/images/74d971ed-b27e-47c4-9d13-fea2ba380078/file",
+      "status": 204,
+      "expected": 204,
+      "bytes": 0,
+      "error_kind": null
+    },
+    {
+      "method": "GET",
+      "path": "/v2/images/74d971ed-b27e-47c4-9d13-fea2ba380078",
+      "status": 200,
+      "expected": 200,
+      "bytes": 818,
+      "error_kind": null
+    },
+    {
+      "method": "GET",
+      "path": "/v2/images/74d971ed-b27e-47c4-9d13-fea2ba380078/file",
+      "status": 200,
+      "expected": 200,
+      "bytes": 1048576,
+      "error_kind": null
+    },
+    {
+      "method": "PATCH",
+      "path": "/v2/images/74d971ed-b27e-47c4-9d13-fea2ba380078",
+      "status": 200,
+      "expected": 200,
+      "bytes": 826,
+      "error_kind": null
+    },
+    {
+      "method": "DELETE",
+      "path": "/v2/images/74d971ed-b27e-47c4-9d13-fea2ba380078",
+      "status": 204,
+      "expected": 204,
+      "bytes": 0,
+      "error_kind": null
+    },
+    {
+      "method": "GET",
+      "path": "/v2/images/74d971ed-b27e-47c4-9d13-fea2ba380078",
+      "status": 404,
+      "expected": 404,
+      "bytes": 155,
+      "error_kind": null
+    },
+    {
+      "method": "GET",
+      "path": "/v2/images?limit=1000",
+      "status": 200,
+      "expected": 200,
+      "bytes": 1056,
+      "error_kind": null
+    }
+  ]
+}

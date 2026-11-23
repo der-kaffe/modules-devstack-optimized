@@ -1,0 +1,170 @@
+{
+  "schema": 1,
+  "run_id": "catalog-lifecycle-c16-r01-python",
+  "scenario": "catalog-lifecycle",
+  "implementation": "python",
+  "concurrency": 16,
+  "planned_duration_s": 4,
+  "warmup_s": 1,
+  "load_model": "closed-loop; one cycle per worker",
+  "drain": "complete cycle started before deadline; denominator includes entire cycle drain",
+  "latency_boundary": "before send through complete response; validation/logging outside request latency",
+  "seed_scope": "selected metadata fields, image identity/state, complete payload bytes and hashes",
+  "valid": true,
+  "warmup": {
+    "start_utc": "2026-11-19T18:59:59.828045+00:00",
+    "end_utc": "2026-11-19T19:00:03.515586+00:00",
+    "elapsed_s": 3.687541111,
+    "requests": 96,
+    "correct": 96,
+    "errors": 0,
+    "cycles": 16,
+    "correct_ops_s": 26.033608063007165,
+    "complete_cycles_s": 4.338934677167861,
+    "validated_payload_bytes": 0,
+    "validated_payload_mib_s": 0.0,
+    "latency_ms": {
+      "p50": 294.606516,
+      "p95": 2305.513341,
+      "p99": 2674.376496
+    },
+    "p99_tail_supported": false,
+    "failed": false
+  },
+  "measurement": {
+    "start_utc": "2026-11-19T19:00:03.517973+00:00",
+    "end_utc": "2026-11-19T19:00:10.654420+00:00",
+    "elapsed_s": 7.136446608,
+    "requests": 192,
+    "correct": 192,
+    "errors": 0,
+    "cycles": 32,
+    "correct_ops_s": 26.904145795018888,
+    "complete_cycles_s": 4.484024299169815,
+    "validated_payload_bytes": 0,
+    "validated_payload_mib_s": 0.0,
+    "latency_ms": {
+      "p50": 278.995007,
+      "p95": 2240.804774,
+      "p99": 2648.424442
+    },
+    "p99_tail_supported": false,
+    "failed": false
+  },
+  "cleanup_errors": [],
+  "pending_images": [],
+  "cleanup_ok": true,
+  "external_abort": false,
+  "host_storage": {
+    "filesystem_path": "/var/lib/libvirt/images",
+    "minimum_required_bytes": 10737418240,
+    "minimum_observed_free_bytes": 40859525120,
+    "aborted": false,
+    "poll_interval_s": 2
+  },
+  "guest_storage": {
+    "samples": [
+      {
+        "free_bytes": 35061129216,
+        "store_bytes": 61,
+        "utc": "2026-11-19T18:59:59.825703+00:00"
+      },
+      {
+        "free_bytes": 35052236800,
+        "store_bytes": 61,
+        "utc": "2026-11-19T19:00:03.109775+00:00"
+      },
+      {
+        "free_bytes": 35051659264,
+        "store_bytes": 61,
+        "utc": "2026-11-19T19:00:06.416184+00:00"
+      },
+      {
+        "free_bytes": 35051110400,
+        "store_bytes": 61,
+        "utc": "2026-11-19T19:00:09.693857+00:00"
+      }
+    ],
+    "aborted": false
+  },
+  "generator_cpu_seconds": 0.18999999999999906,
+  "generator_max_rss_bytes_process_lifetime": 38363136,
+  "host_load_average": {
+    "before": [
+      6.83935546875,
+      2.59814453125,
+      1.58837890625
+    ],
+    "after": [
+      5.85302734375,
+      2.5859375,
+      1.6005859375
+    ]
+  },
+  "clocks": {
+    "before": {
+      "best": {
+        "rtt_ns": 195772,
+        "remote_minus_host_ns": -13276761
+      },
+      "probes": [
+        {
+          "rtt_ns": 430586,
+          "remote_minus_host_ns": -13216043
+        },
+        {
+          "rtt_ns": 262545,
+          "remote_minus_host_ns": -13294666
+        },
+        {
+          "rtt_ns": 288353,
+          "remote_minus_host_ns": -13254337
+        },
+        {
+          "rtt_ns": 217922,
+          "remote_minus_host_ns": -13270691
+        },
+        {
+          "rtt_ns": 195772,
+          "remote_minus_host_ns": -13276761
+        }
+      ]
+    },
+    "after": {
+      "best": {
+        "rtt_ns": 230666,
+        "remote_minus_host_ns": -13529915
+      },
+      "probes": [
+        {
+          "rtt_ns": 464448,
+          "remote_minus_host_ns": -13479346
+        },
+        {
+          "rtt_ns": 316045,
+          "remote_minus_host_ns": -13507396
+        },
+        {
+          "rtt_ns": 285197,
+          "remote_minus_host_ns": -13506051
+        },
+        {
+          "rtt_ns": 239743,
+          "remote_minus_host_ns": -13537056
+        },
+        {
+          "rtt_ns": 230666,
+          "remote_minus_host_ns": -13529915
+        }
+      ]
+    }
+  },
+  "clock_drift_ns": 253154,
+  "clock_valid": true,
+  "post_state": {
+    "removed": true,
+    "seed_state_equal": true,
+    "roundtrip_after": null,
+    "own_tag_empty": true
+  }
+}

@@ -1,0 +1,160 @@
+{
+  "schema": 1,
+  "run_id": "catalog-show-c01-r01-go",
+  "scenario": "catalog-show",
+  "implementation": "go",
+  "concurrency": 1,
+  "planned_duration_s": 4,
+  "warmup_s": 1,
+  "load_model": "closed-loop; one cycle per worker",
+  "drain": "complete cycle started before deadline; denominator includes entire cycle drain",
+  "latency_boundary": "before send through complete response; validation/logging outside request latency",
+  "seed_scope": "selected metadata fields, image identity/state, complete payload bytes and hashes",
+  "valid": true,
+  "warmup": {
+    "start_utc": "2026-10-31T16:22:57.677180+00:00",
+    "end_utc": "2026-10-31T16:22:58.685205+00:00",
+    "elapsed_s": 1.008024893,
+    "requests": 97,
+    "correct": 97,
+    "errors": 0,
+    "cycles": 97,
+    "correct_ops_s": 96.22778234306958,
+    "complete_cycles_s": 96.22778234306958,
+    "validated_payload_bytes": 0,
+    "validated_payload_mib_s": 0.0,
+    "latency_ms": {
+      "p50": 10.302125,
+      "p95": 13.871205,
+      "p99": 15.589764
+    },
+    "p99_tail_supported": false,
+    "failed": false
+  },
+  "measurement": {
+    "start_utc": "2026-10-31T16:22:58.687025+00:00",
+    "end_utc": "2026-10-31T16:23:02.693943+00:00",
+    "elapsed_s": 4.00691754,
+    "requests": 385,
+    "correct": 385,
+    "errors": 0,
+    "cycles": 385,
+    "correct_ops_s": 96.08383405863651,
+    "complete_cycles_s": 96.08383405863651,
+    "validated_payload_bytes": 0,
+    "validated_payload_mib_s": 0.0,
+    "latency_ms": {
+      "p50": 10.226766,
+      "p95": 14.104441,
+      "p99": 17.914293
+    },
+    "p99_tail_supported": false,
+    "failed": false
+  },
+  "cleanup_errors": [],
+  "pending_images": [],
+  "cleanup_ok": true,
+  "external_abort": false,
+  "host_storage": {
+    "filesystem_path": "/var/lib/libvirt/images",
+    "minimum_required_bytes": 10737418240,
+    "minimum_observed_free_bytes": 39899693056,
+    "aborted": false,
+    "poll_interval_s": 2
+  },
+  "guest_storage": {
+    "samples": [
+      {
+        "free_bytes": 46899765248,
+        "store_bytes": 61,
+        "utc": "2026-10-31T16:22:57.676073+00:00"
+      },
+      {
+        "free_bytes": 46898176000,
+        "store_bytes": 61,
+        "utc": "2026-10-31T16:23:00.902318+00:00"
+      }
+    ],
+    "aborted": false
+  },
+  "generator_cpu_seconds": 0.21000000000000008,
+  "generator_max_rss_bytes_process_lifetime": 41455616,
+  "host_load_average": {
+    "before": [
+      6.158203125,
+      4.42626953125,
+      2.93701171875
+    ],
+    "after": [
+      6.1455078125,
+      4.45263671875,
+      2.95361328125
+    ]
+  },
+  "clocks": {
+    "before": {
+      "best": {
+        "rtt_ns": 76405,
+        "remote_minus_host_ns": -388449
+      },
+      "probes": [
+        {
+          "rtt_ns": 233919,
+          "remote_minus_host_ns": -371625
+        },
+        {
+          "rtt_ns": 184552,
+          "remote_minus_host_ns": -376843
+        },
+        {
+          "rtt_ns": 131696,
+          "remote_minus_host_ns": -379548
+        },
+        {
+          "rtt_ns": 107527,
+          "remote_minus_host_ns": -381001
+        },
+        {
+          "rtt_ns": 76405,
+          "remote_minus_host_ns": -388449
+        }
+      ]
+    },
+    "after": {
+      "best": {
+        "rtt_ns": 281229,
+        "remote_minus_host_ns": -427935
+      },
+      "probes": [
+        {
+          "rtt_ns": 442284,
+          "remote_minus_host_ns": -399670
+        },
+        {
+          "rtt_ns": 409397,
+          "remote_minus_host_ns": -417911
+        },
+        {
+          "rtt_ns": 298691,
+          "remote_minus_host_ns": -441465
+        },
+        {
+          "rtt_ns": 281229,
+          "remote_minus_host_ns": -427935
+        },
+        {
+          "rtt_ns": 413387,
+          "remote_minus_host_ns": -428587
+        }
+      ]
+    }
+  },
+  "clock_drift_ns": 39486,
+  "clock_valid": true,
+  "post_state": {
+    "removed": true,
+    "seed_state_equal": true,
+    "roundtrip_after": null,
+    "own_tag_empty": true
+  }
+}

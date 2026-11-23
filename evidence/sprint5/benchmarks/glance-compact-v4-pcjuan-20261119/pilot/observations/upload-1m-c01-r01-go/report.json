@@ -1,0 +1,166 @@
+{
+  "schema": 1,
+  "run_id": "upload-1m-c01-r01-go",
+  "scenario": "upload-1m",
+  "implementation": "go",
+  "concurrency": 1,
+  "planned_duration_s": 4,
+  "warmup_s": 1,
+  "load_model": "closed-loop; one cycle per worker",
+  "drain": "complete cycle started before deadline; denominator includes entire cycle drain",
+  "latency_boundary": "before send through complete response; validation/logging outside request latency",
+  "seed_scope": "selected metadata fields, image identity/state, complete payload bytes and hashes",
+  "valid": true,
+  "warmup": {
+    "start_utc": "2026-11-19T19:00:19.985844+00:00",
+    "end_utc": "2026-11-19T19:00:21.018139+00:00",
+    "elapsed_s": 1.032295154,
+    "requests": 78,
+    "correct": 78,
+    "errors": 0,
+    "cycles": 13,
+    "correct_ops_s": 75.5597851038638,
+    "complete_cycles_s": 12.593297517310635,
+    "validated_payload_bytes": 13631488,
+    "validated_payload_mib_s": 12.593297517310635,
+    "latency_ms": {
+      "p50": 2.978736,
+      "p95": 49.451197,
+      "p99": 56.901399
+    },
+    "p99_tail_supported": false,
+    "failed": false
+  },
+  "measurement": {
+    "start_utc": "2026-11-19T19:00:21.019295+00:00",
+    "end_utc": "2026-11-19T19:00:25.049173+00:00",
+    "elapsed_s": 4.029878466,
+    "requests": 324,
+    "correct": 324,
+    "errors": 0,
+    "cycles": 54,
+    "correct_ops_s": 80.3994469643641,
+    "complete_cycles_s": 13.399907827394017,
+    "validated_payload_bytes": 56623104,
+    "validated_payload_mib_s": 13.399907827394017,
+    "latency_ms": {
+      "p50": 4.723441,
+      "p95": 43.395014,
+      "p99": 49.604942
+    },
+    "p99_tail_supported": false,
+    "failed": false
+  },
+  "cleanup_errors": [],
+  "pending_images": [],
+  "cleanup_ok": true,
+  "external_abort": false,
+  "host_storage": {
+    "filesystem_path": "/var/lib/libvirt/images",
+    "minimum_required_bytes": 10737418240,
+    "minimum_observed_free_bytes": 40854872064,
+    "aborted": false,
+    "poll_interval_s": 2
+  },
+  "guest_storage": {
+    "samples": [
+      {
+        "free_bytes": 35049676800,
+        "store_bytes": 1048637,
+        "utc": "2026-11-19T19:00:19.984898+00:00"
+      },
+      {
+        "free_bytes": 35048038400,
+        "store_bytes": 2097213,
+        "utc": "2026-11-19T19:00:23.256205+00:00"
+      }
+    ],
+    "aborted": false
+  },
+  "generator_cpu_seconds": 0.25999999999999934,
+  "generator_max_rss_bytes_process_lifetime": 38363136,
+  "host_load_average": {
+    "before": [
+      5.38427734375,
+      2.54296875,
+      1.591796875
+    ],
+    "after": [
+      5.19287109375,
+      2.55078125,
+      1.599609375
+    ]
+  },
+  "clocks": {
+    "before": {
+      "best": {
+        "rtt_ns": 109983,
+        "remote_minus_host_ns": -13539992
+      },
+      "probes": [
+        {
+          "rtt_ns": 371717,
+          "remote_minus_host_ns": -13497152
+        },
+        {
+          "rtt_ns": 187046,
+          "remote_minus_host_ns": -13527827
+        },
+        {
+          "rtt_ns": 162630,
+          "remote_minus_host_ns": -13546557
+        },
+        {
+          "rtt_ns": 148905,
+          "remote_minus_host_ns": -13532693
+        },
+        {
+          "rtt_ns": 109983,
+          "remote_minus_host_ns": -13539992
+        }
+      ]
+    },
+    "after": {
+      "best": {
+        "rtt_ns": 96107,
+        "remote_minus_host_ns": -13627313
+      },
+      "probes": [
+        {
+          "rtt_ns": 246456,
+          "remote_minus_host_ns": -13591087
+        },
+        {
+          "rtt_ns": 330290,
+          "remote_minus_host_ns": -13682948
+        },
+        {
+          "rtt_ns": 280618,
+          "remote_minus_host_ns": -13603242
+        },
+        {
+          "rtt_ns": 137604,
+          "remote_minus_host_ns": -13614739
+        },
+        {
+          "rtt_ns": 96107,
+          "remote_minus_host_ns": -13627313
+        }
+      ]
+    }
+  },
+  "clock_drift_ns": 87321,
+  "clock_valid": true,
+  "post_state": {
+    "removed": true,
+    "seed_state_equal": true,
+    "roundtrip_after": [
+      {
+        "id": "7a3da2cd-03b3-562c-9f84-91b748d99eae",
+        "bytes": 1048576,
+        "valid": true
+      }
+    ],
+    "own_tag_empty": true
+  }
+}

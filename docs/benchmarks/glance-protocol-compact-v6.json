@@ -1,0 +1,106 @@
+{
+  "schema": 1,
+  "protocol": "glance-compact-v6",
+  "status": "frozen 2026-11-21 on Juan PC (4 vCPU / 6 GiB VM); v5 matrix and route under the same data conditions",
+  "scope": "Glance Python versus Glance Go under the same conditions: same Apache route, same MySQL server and glance database, same filesystem store and same Keystone service user (Go reads the original glance-api.conf), both with notifications noop. 9 loads x C=1/4/8/16 x 5 repetitions.",
+  "implementations": [
+    "python",
+    "go"
+  ],
+  "concurrency": [
+    1,
+    4,
+    8,
+    16
+  ],
+  "repetitions": 5,
+  "warmup_s": 10,
+  "measurement_s": 30,
+  "metadata_request_timeout_s": 120,
+  "binary_request_timeout_s": 120,
+  "sampling_interval_s": 1,
+  "order_seed": 20261031,
+  "bootstrap_resamples": 10000,
+  "confidence": 0.95,
+  "load_model": "closed-loop",
+  "catalog_seed_count": 100,
+  "payload_sizes_bytes": [
+    1048576,
+    16777216,
+    67108864
+  ],
+  "scenarios": [
+    {
+      "id": "catalog-list",
+      "kind": "metadata"
+    },
+    {
+      "id": "catalog-show",
+      "kind": "metadata"
+    },
+    {
+      "id": "catalog-lifecycle",
+      "kind": "metadata"
+    },
+    {
+      "id": "upload-1m",
+      "kind": "upload-cycle",
+      "size_bytes": 1048576
+    },
+    {
+      "id": "upload-16m",
+      "kind": "upload-cycle",
+      "size_bytes": 16777216
+    },
+    {
+      "id": "upload-64m",
+      "kind": "upload-cycle",
+      "size_bytes": 67108864
+    },
+    {
+      "id": "download-1m",
+      "kind": "download",
+      "size_bytes": 1048576
+    },
+    {
+      "id": "download-16m",
+      "kind": "download",
+      "size_bytes": 16777216
+    },
+    {
+      "id": "download-64m",
+      "kind": "download",
+      "size_bytes": 67108864
+    }
+  ],
+  "required_official_windows": 360,
+  "minimum_free_disk_bytes": 8589934592,
+  "maximum_owned_store_bytes": 4294967296,
+  "transfer_admission_limit_go": 16,
+  "pilot": {
+    "concurrency": [
+      1,
+      4,
+      8,
+      16
+    ],
+    "repetitions": 1,
+    "warmup_s": 1,
+    "measurement_s": 4,
+    "required_windows": 72
+  },
+  "predecessor": "glance-compact-v5 accepted 360/360 (Juan PC); v5 ran Go on its own MySQL server and store, and Go sent notifications while Python did not",
+  "acceptance": "All 108 windows valid for this reduced scope; hashes, lengths, state, resource sampling, cleanup and original restoration verified; no minimum speedup required",
+  "purpose": "Remove the remaining environment differences: the only difference left is the implementation",
+  "host_free_minimum_bytes": 21474836480,
+  "log_policy": "Bound VM operational logs; rotate only outside measured windows, retain recent incident diagnostics and all benchmark samples",
+  "statistics": "Five independent paired repetitions per cell; publish individual results, median and range; bootstrap confidence only as declared",
+  "notification_policy": "noop",
+  "reason": "v5 limit: Go had a dedicated MySQL (128 MiB buffer pool, only its images) while Python shared DevStack MySQL (16 MiB, ~6000 tombstones). Go now uses the official catalog as in the permanent replacement. Python stays noop (stock messagingv2 exhausted descriptors in v2); Go is noop too so both do the same work.",
+  "maximum_open_fd_growth_per_window": 256,
+  "go_notification_policy": "noop",
+  "route": "public-both",
+  "go_catalog": "official",
+  "timeout_reason": "Pilot attempts 1 and 3 stopped at upload-64m C=16: a small metadata GET of the original waited 10.05 s behind 64 MiB uploads (2 uWSGI workers saturated, ~78 MiB/s for 16 clients) and hit the client 10 s timeout. 120 s, as for binary requests, records that wait as latency; requests over 10 s are counted per window (requests_over_10s). Any HTTP error, wrong bytes or failed cleanup still invalidates the window.",
+  "initial_state": "Catalog purged before the campaign with the original tool: glance-manage db purge and purge_images_table, --age_in_days 0 (24157 soft-deleted images from earlier campaigns removed). Only the 2 active images remain (CirrOS, mi-cirros); Glance Go bookkeeping rows of purged images (74, phase cleaned) removed so its startup recovery has nothing orphaned."
+}

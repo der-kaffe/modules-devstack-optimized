@@ -1,0 +1,1630 @@
+{
+  "schema": 1,
+  "campaign_id": "6f874147-589c-48d4-b340-e4ca6d8d74d6",
+  "stage": "measurement",
+  "started_utc": "2026-11-23T15:25:36.089655+00:00",
+  "protocol": {
+    "schema": 1,
+    "protocol": "glance-v7",
+    "status": "frozen 2026-11-23 on Juan PC (4 vCPU / 6 GiB VM); design of the Placement campaign (C=1/16, 3 pairs, no pilot)",
+    "scope": "Glance Python versus Glance Go under the same conditions: same Apache route, same MySQL server and glance database, same filesystem store and same Keystone service user (Go reads the original glance-api.conf), both with notifications noop. 12 loads x C=1/16 x 3 Python/Go pairs, same seed and random pair order; each reported value is the median of 3 pairs.",
+    "implementations": [
+      "python",
+      "go"
+    ],
+    "concurrency": [
+      1,
+      16
+    ],
+    "repetitions": 3,
+    "warmup_s": 10,
+    "measurement_s": 30,
+    "metadata_request_timeout_s": 120,
+    "binary_request_timeout_s": 120,
+    "sampling_interval_s": 1,
+    "order_seed": 20261031,
+    "bootstrap_resamples": 10000,
+    "confidence": 0.95,
+    "load_model": "closed-loop",
+    "catalog_seed_count": 100,
+    "payload_sizes_bytes": [
+      1048576,
+      16777216,
+      67108864
+    ],
+    "scenarios": [
+      {
+        "id": "catalog-list",
+        "kind": "metadata"
+      },
+      {
+        "id": "catalog-show",
+        "kind": "metadata"
+      },
+      {
+        "id": "catalog-lifecycle",
+        "kind": "metadata"
+      },
+      {
+        "id": "upload-1m",
+        "kind": "upload-cycle",
+        "size_bytes": 1048576
+      },
+      {
+        "id": "upload-16m",
+        "kind": "upload-cycle",
+        "size_bytes": 16777216
+      },
+      {
+        "id": "upload-64m",
+        "kind": "upload-cycle",
+        "size_bytes": 67108864
+      },
+      {
+        "id": "download-1m",
+        "kind": "download",
+        "size_bytes": 1048576
+      },
+      {
+        "id": "download-16m",
+        "kind": "download",
+        "size_bytes": 16777216
+      },
+      {
+        "id": "download-64m",
+        "kind": "download",
+        "size_bytes": 67108864
+      },
+      {
+        "id": "import-direct-16m",
+        "kind": "import-cycle",
+        "size_bytes": 16777216,
+        "cycle": "fresh-id, create, stage (PUT /stage), import (POST /import glance-direct), import-wait (GET until active, pause import_poll_pause_s outside latency), verify-import (hashes), delete, verify-absent"
+      },
+      {
+        "id": "upload-qcow2",
+        "kind": "upload-cycle",
+        "size_bytes": null,
+        "source": "qemu-img convert -f raw -O qcow2 of the 16 MiB payload, made on the host",
+        "cycle": "fresh-id, create (disk_format qcow2), upload, verify-upload (hashes and virtual_size 16 MiB), delete, verify-absent"
+      },
+      {
+        "id": "nova-mix",
+        "kind": "nova-mix",
+        "size_bytes": 16777216,
+        "cycle": "show (GET image), download (16 MiB, bytes and hashes), list (GET /v2/images?status=active&visibility=private&tag=\u2026)"
+      }
+    ],
+    "required_official_windows": 144,
+    "minimum_free_disk_bytes": 8589934592,
+    "maximum_owned_store_bytes": 4294967296,
+    "transfer_admission_limit_go": 16,
+    "predecessor": "glance-compact-v6 accepted 360/360 (Juan PC, binary a69474d, C=1/4/8/16 x 5)",
+    "acceptance": "All 144 official windows valid: hashes, lengths, state, resource sampling, cleanup and original restoration verified; no minimum speedup required. No pilot (Juan): a failed window stops the campaign and it resumes from the first incomplete pair.",
+    "purpose": "Measure the Glance Go binary of PR #28/#29 (Glance 100 % in Go) with the design of the Placement campaign, plus three Glance-specific loads",
+    "host_free_minimum_bytes": 21474836480,
+    "log_policy": "Bound VM operational logs; rotate only outside measured windows, retain recent incident diagnostics and all benchmark samples",
+    "statistics": "Three independent paired repetitions per cell; publish individual results, median and range; ratios are ratios of medians; no significance claim",
+    "notification_policy": "noop",
+    "reason": "v5 limit: Go had a dedicated MySQL (128 MiB buffer pool, only its images) while Python shared DevStack MySQL (16 MiB, ~6000 tombstones). Go now uses the official catalog as in the permanent replacement. Python stays noop (stock messagingv2 exhausted descriptors in v2); Go is noop too so both do the same work.",
+    "maximum_open_fd_growth_per_window": 256,
+    "go_notification_policy": "noop",
+    "route": "public-both",
+    "go_catalog": "official",
+    "timeout_reason": "Pilot attempts 1 and 3 stopped at upload-64m C=16: a small metadata GET of the original waited 10.05 s behind 64 MiB uploads (2 uWSGI workers saturated, ~78 MiB/s for 16 clients) and hit the client 10 s timeout. 120 s, as for binary requests, records that wait as latency; requests over 10 s are counted per window (requests_over_10s). Any HTTP error, wrong bytes or failed cleanup still invalidates the window.",
+    "initial_state": "Catalog purged before the campaign with the original tool: glance-manage db purge and purge_images_table, --age_in_days 0 (24157 soft-deleted images from earlier campaigns removed). Only the 2 active images remain (CirrOS, mi-cirros); Glance Go bookkeeping rows of purged images (74, phase cleaned) removed so its startup recovery has nothing orphaned.",
+    "pilot": null,
+    "import_poll_pause_s": 0.02
+  },
+  "protocol_sha256": "65f4dfad617c4efbd8a8d20cec6d2cdfd02a6d11282369fabdecea9e7c06ce8f",
+  "git_base": "12b53621b0a75be1fa98218a3af277697c538fbb",
+  "source_sha256": {
+    "scripts/benchmarks/analyze_glance.py": "dedd960d8b31b5d8d605235aad90d19eb51622421cc228bc0245df4043877147",
+    "scripts/benchmarks/analyze_placement.py": "373793206df681e712d1e1e2113833d15db6fb7ad1032c5e99e6adbc4108f84f",
+    "scripts/benchmarks/campaign_protocol.py": "6533ba82a0656bdce05695c63b74475fc3814d0c16c4835e706f19b88dd341d0",
+    "scripts/benchmarks/complete_glance_campaign.py": "41906485b6ab009335c9f23333c424f27519f6735167451fe3c5cf75d8224490",
+    "scripts/benchmarks/complete_placement_campaign.py": "5040deda76262a3602574df841dcd2024b54e88a15cfdd6b3c9be3bfa0bcd965",
+    "scripts/benchmarks/glance_campaign.py": "130f18b7f282d5867e53596f8bc456f96399534d6897287ee84e7b01e2e8b003",
+    "scripts/benchmarks/glance_fd_calibration.py": "b099e32351316f812b4380d2368600cc65d771905bf7a1bf15244f525fee5755",
+    "scripts/benchmarks/glance_http.py": "60371e010ecb5b4ceb41e4732d7aae7c7c5524d30d489b2196172da7aa5bbc11",
+    "scripts/benchmarks/glance_lab.py": "b87cc816e3216d582e98f04ec0b37e1e883ed364d561945cefe3436e6c578b9e",
+    "scripts/benchmarks/glance_memory.py": "41ed8387bf0ce5693174a6fe53313b9da2fdf210f1126deb458279311ad5725f",
+    "scripts/benchmarks/glance_notifications.py": "96aa83a6d061cbe57350ea4f45f0087f57dba2b47043b375b1c2ea4fc9df99de",
+    "scripts/benchmarks/glance_preflight.py": "034227a0f3c369cb70d6b0d50205babc299d64f4cd33a3aaf9b4c50bd3ff8d51",
+    "scripts/benchmarks/glance_window.py": "73c0974655117e0cda597f6f77a9635194d83eb7d544bc3ed08efdb1b1a108dd",
+    "scripts/benchmarks/lab_controls.py": "a12bd2571181d47390aba6d7ffcdcd49dad7e1d2f3f52a97474f541f9ffc202e",
+    "scripts/benchmarks/placement_campaign.py": "8f2d5ef722a05b9079e92cd24b30a32a97f393cc24ea8fc41a61eb91c6800e55",
+    "scripts/benchmarks/placement_http.py": "57657eebd44580f0989640cbdc1da20375e90cda943ae259974f3110f0ac0d7b",
+    "scripts/benchmarks/placement_lab.py": "6e91fe4a58e125b154a18af0e2799e38e945cf746aa79a07d518461e0b174220",
+    "scripts/benchmarks/placement_resources.py": "bad10d1fbd277f8852c3cdd720d634f18be58411960a05817c2a2b23fc5cc508",
+    "scripts/benchmarks/placement_window.py": "8e990547c5fe07f0a5d5f9b802640c2d77d870d1928180be3d9d77ab106cdf3c",
+    "scripts/benchmarks/publish_placement_results.py": "6bf999f2f3a3a49e5af16d4558a2740a94104291f6154b51695815f0e8cf5ca8",
+    "scripts/benchmarks/sample_processes.py": "5a4252ba10ce1b2de3a37b479e4a7febe62f8ec8a0c7df31ae81b505dc16b72c",
+    "scripts/harness.py": "d69f4dcf67a939ff49b105b4de663b573575369844779ba712add3e837e9bf07",
+    "scripts/integration/glance_devstack_suite.py": "cc3f3d54c8c41983c39613155efaa7ab9c3f3e0b2fd68a5fa48ffaf6e5c636dd",
+    "scripts/integration/glance_differential.py": "5af5fc5f0a401130ec9426578609966f13cddc891615328dbed31949ec1c3d58",
+    "scripts/integration/glance_flow.py": "bcd4a797df5ed62bb1cb284ad4becf62d9c4bee49497964e46c0fb5fd55f6f28",
+    "scripts/integration/glance_replace.py": "c5b946d038954a792dfd2fc6cb403719421ba321e7452b4143d9037def09ea6e",
+    "scripts/integration/glance_shared_e2e.py": "1aa83a74514088ab8092c4395999ec6bfefc74d76bda046890d6be79f82e9b8d",
+    "scripts/integration/glance_suite.py": "5cf04186bceda8c3d1d046477ed75eb39fd57a77c9d1a925d8c103d880a827a9",
+    "scripts/integration/glance_switch.py": "076a9959509af8818780d0bdccd72908de2607d5ca79d47bf959018c7c0fba10",
+    "scripts/integration/lab_identity.py": "cb154c88dca6e92f290e6f355b777731df020db7408b94af45c5024c8de6e58e",
+    "scripts/integration/nova_candidates_probe.py": "76779b23fbe4daaa7b1fce0240cca7601f41c446cd4bb2ae86ba0672d850c72d",
+    "scripts/integration/placement_boot.py": "04dd9e519c59905ccc9acfa5bccebb78fb8b8a603712d9b8b148b145ee8b6b1d",
+    "scripts/integration/placement_preflight.py": "8762c86e50a83176d579fbd9066571aca852a98dae9f996a766a575074d82ef8",
+    "scripts/integration/placement_runtime.py": "fa684d41c81fec38e73eecf413404380ff66a93e7d1bbc494546ed7a6078a9ee",
+    "scripts/integration/placement_suite.py": "2fb35606ff1a9cce0c31f8d10a7d5a4d9167dce692d97895c9c0378cf3026e43",
+    "scripts/integration/placement_switch.py": "15fb15249795aa60901322f003ade5d308024ffb935688869905acb923d834e5",
+    "scripts/placement_allocation_differential.py": "50fa27a0b11876ff51e3d3729ab95a6bb259042866113a46d07f13de01361718",
+    "scripts/placement_auth_differential.py": "ef305eb0281c55ce54f665e8e6dcb2887924d51670fcc30594ac361d82b53bae",
+    "scripts/placement_candidates_differential.py": "bbd6fa5619f61c07b4db39d925944ef24f6639140b442ac8ff112559d13f9978",
+    "scripts/placement_catalog_differential.py": "86bedcf741459cd354248317b1c78763bcb39bf556c9508f574f280f7a773f88",
+    "scripts/placement_consumer_differential.py": "7bfb1eec496c5eebfb1863acd63e7179907a74dc39f8c39ade0037ff20e414a5",
+    "scripts/placement_differential.py": "8dbcdb3a2f3933e519c97e5cb2fcd771cdb6a56f064b31989ca6f1503b761490",
+    "scripts/placement_persistence_campaign.py": "dcbb4ba0a8922c02e66f1bec659e91b3bf0ab1fe413acb8d190002e1e98f5ad2",
+    "scripts/update_sprint2_excel.py": "892595fd509088694691f6739881aafe0e0b45d972cfc3692c26453228ff868a",
+    "scripts/verify_sprint2.py": "5382b445e2d59d817f4f068a68dc884e53a01b3b87bfd2ef0c570bc5c8461195"
+  },
+  "sequence": [
+    {
+      "pair_id": "catalog-list-c01-r01",
+      "scenario": "catalog-list",
+      "size_bytes": null,
+      "concurrency": 1,
+      "repetition": 1,
+      "order": [
+        "python",
+        "go"
+      ],
+      "namespace": "593a55a4-8316-5032-842d-c3ba8a2930e6"
+    },
+    {
+      "pair_id": "catalog-list-c01-r02",
+      "scenario": "catalog-list",
+      "size_bytes": null,
+      "concurrency": 1,
+      "repetition": 2,
+      "order": [
+        "go",
+        "python"
+      ],
+      "namespace": "ef328fa1-2a0e-5ce0-b14f-04cf81d3df71"
+    },
+    {
+      "pair_id": "catalog-list-c01-r03",
+      "scenario": "catalog-list",
+      "size_bytes": null,
+      "concurrency": 1,
+      "repetition": 3,
+      "order": [
+        "python",
+        "go"
+      ],
+      "namespace": "759ddca0-a04a-51ac-9ab1-49a171e834b9"
+    },
+    {
+      "pair_id": "catalog-list-c16-r01",
+      "scenario": "catalog-list",
+      "size_bytes": null,
+      "concurrency": 16,
+      "repetition": 1,
+      "order": [
+        "go",
+        "python"
+      ],
+      "namespace": "4863dabf-02b6-5187-8255-e5b9526e7869"
+    },
+    {
+      "pair_id": "catalog-list-c16-r02",
+      "scenario": "catalog-list",
+      "size_bytes": null,
+      "concurrency": 16,
+      "repetition": 2,
+      "order": [
+        "go",
+        "python"
+      ],
+      "namespace": "e427a519-f64d-56c2-8181-6c7fc72a449c"
+    },
+    {
+      "pair_id": "catalog-list-c16-r03",
+      "scenario": "catalog-list",
+      "size_bytes": null,
+      "concurrency": 16,
+      "repetition": 3,
+      "order": [
+        "go",
+        "python"
+      ],
+      "namespace": "027160d5-1479-5c5b-a92e-8483a89cf2ee"
+    },
+    {
+      "pair_id": "catalog-show-c01-r01",
+      "scenario": "catalog-show",
+      "size_bytes": null,
+      "concurrency": 1,
+      "repetition": 1,
+      "order": [
+        "go",
+        "python"
+      ],
+      "namespace": "44710057-460d-5d0c-932b-35ee933b152e"
+    },
+    {
+      "pair_id": "catalog-show-c01-r02",
+      "scenario": "catalog-show",
+      "size_bytes": null,
+      "concurrency": 1,
+      "repetition": 2,
+      "order": [
+        "python",
+        "go"
+      ],
+      "namespace": "29be6234-1a93-5899-873f-ef662cbc5e91"
+    },
+    {
+      "pair_id": "catalog-show-c01-r03",
+      "scenario": "catalog-show",
+      "size_bytes": null,
+      "concurrency": 1,
+      "repetition": 3,
+      "order": [
+        "go",
+        "python"
+      ],
+      "namespace": "e3db6f41-82d1-5744-ba60-fda0a2caa651"
+    },
+    {
+      "pair_id": "catalog-show-c16-r01",
+      "scenario": "catalog-show",
+      "size_bytes": null,
+      "concurrency": 16,
+      "repetition": 1,
+      "order": [
+        "go",
+        "python"
+      ],
+      "namespace": "fd536353-78a4-53b0-987e-d508e5ef82da"
+    },
+    {
+      "pair_id": "catalog-show-c16-r02",
+      "scenario": "catalog-show",
+      "size_bytes": null,
+      "concurrency": 16,
+      "repetition": 2,
+      "order": [
+        "go",
+        "python"
+      ],
+      "namespace": "e106464e-6277-5028-8dcf-a4b65a6d72d3"
+    },
+    {
+      "pair_id": "catalog-show-c16-r03",
+      "scenario": "catalog-show",
+      "size_bytes": null,
+      "concurrency": 16,
+      "repetition": 3,
+      "order": [
+        "go",
+        "python"
+      ],
+      "namespace": "c654a6d0-7cc1-5ea4-b00b-acfa667f62f6"
+    },
+    {
+      "pair_id": "catalog-lifecycle-c01-r01",
+      "scenario": "catalog-lifecycle",
+      "size_bytes": null,
+      "concurrency": 1,
+      "repetition": 1,
+      "order": [
+        "python",
+        "go"
+      ],
+      "namespace": "1b8a9efe-14f1-5437-b967-34e577e84b11"
+    },
+    {
+      "pair_id": "catalog-lifecycle-c01-r02",
+      "scenario": "catalog-lifecycle",
+      "size_bytes": null,
+      "concurrency": 1,
+      "repetition": 2,
+      "order": [
+        "go",
+        "python"
+      ],
+      "namespace": "1480d50f-8b40-5e20-8d8b-9554baadca5a"
+    },
+    {
+      "pair_id": "catalog-lifecycle-c01-r03",
+      "scenario": "catalog-lifecycle",
+      "size_bytes": null,
+      "concurrency": 1,
+      "repetition": 3,
+      "order": [
+        "go",
+        "python"
+      ],
+      "namespace": "c608e87d-cc18-5bd4-8eaa-c73c9547d491"
+    },
+    {
+      "pair_id": "catalog-lifecycle-c16-r01",
+      "scenario": "catalog-lifecycle",
+      "size_bytes": null,
+      "concurrency": 16,
+      "repetition": 1,
+      "order": [
+        "go",
+        "python"
+      ],
+      "namespace": "dcf5fb34-538d-5119-828e-308e1809b0e0"
+    },
+    {
+      "pair_id": "catalog-lifecycle-c16-r02",
+      "scenario": "catalog-lifecycle",
+      "size_bytes": null,
+      "concurrency": 16,
+      "repetition": 2,
+      "order": [
+        "python",
+        "go"
+      ],
+      "namespace": "5d71d90a-c2f3-51b8-87ba-b33417a86432"
+    },
+    {
+      "pair_id": "catalog-lifecycle-c16-r03",
+      "scenario": "catalog-lifecycle",
+      "size_bytes": null,
+      "concurrency": 16,
+      "repetition": 3,
+      "order": [
+        "go",
+        "python"
+      ],
+      "namespace": "3b99938c-2500-559a-98b8-c6d52d3843b0"
+    },
+    {
+      "pair_id": "upload-1m-c01-r01",
+      "scenario": "upload-1m",
+      "size_bytes": 1048576,
+      "concurrency": 1,
+      "repetition": 1,
+      "order": [
+        "python",
+        "go"
+      ],
+      "namespace": "be9d7cf7-068f-5455-a964-03cbde730ac7"
+    },
+    {
+      "pair_id": "upload-1m-c01-r02",
+      "scenario": "upload-1m",
+      "size_bytes": 1048576,
+      "concurrency": 1,
+      "repetition": 2,
+      "order": [
+        "python",
+        "go"
+      ],
+      "namespace": "260aa747-580c-5d36-aa60-fac3f3645d21"
+    },
+    {
+      "pair_id": "upload-1m-c01-r03",
+      "scenario": "upload-1m",
+      "size_bytes": 1048576,
+      "concurrency": 1,
+      "repetition": 3,
+      "order": [
+        "go",
+        "python"
+      ],
+      "namespace": "cdc694c9-647f-5c4f-9a80-18d034942377"
+    },
+    {
+      "pair_id": "upload-1m-c16-r01",
+      "scenario": "upload-1m",
+      "size_bytes": 1048576,
+      "concurrency": 16,
+      "repetition": 1,
+      "order": [
+        "go",
+        "python"
+      ],
+      "namespace": "67407c11-1f38-5b37-b6d7-d39405e15cfe"
+    },
+    {
+      "pair_id": "upload-1m-c16-r02",
+      "scenario": "upload-1m",
+      "size_bytes": 1048576,
+      "concurrency": 16,
+      "repetition": 2,
+      "order": [
+        "go",
+        "python"
+      ],
+      "namespace": "466db19a-ed4e-5e0b-8b1c-eca70468182c"
+    },
+    {
+      "pair_id": "upload-1m-c16-r03",
+      "scenario": "upload-1m",
+      "size_bytes": 1048576,
+      "concurrency": 16,
+      "repetition": 3,
+      "order": [
+        "python",
+        "go"
+      ],
+      "namespace": "7b666be2-f282-51f2-a18a-42f693b37c46"
+    },
+    {
+      "pair_id": "upload-16m-c01-r01",
+      "scenario": "upload-16m",
+      "size_bytes": 16777216,
+      "concurrency": 1,
+      "repetition": 1,
+      "order": [
+        "go",
+        "python"
+      ],
+      "namespace": "927bfe21-c2df-5b94-b4bb-dc2ee2d21f2d"
+    },
+    {
+      "pair_id": "upload-16m-c01-r02",
+      "scenario": "upload-16m",
+      "size_bytes": 16777216,
+      "concurrency": 1,
+      "repetition": 2,
+      "order": [
+        "python",
+        "go"
+      ],
+      "namespace": "3d5d97e5-57a5-5d1c-85da-4a87a7a56509"
+    },
+    {
+      "pair_id": "upload-16m-c01-r03",
+      "scenario": "upload-16m",
+      "size_bytes": 16777216,
+      "concurrency": 1,
+      "repetition": 3,
+      "order": [
+        "python",
+        "go"
+      ],
+      "namespace": "ccfc494a-1c3e-5a2f-99a1-051945a5e669"
+    },
+    {
+      "pair_id": "upload-16m-c16-r01",
+      "scenario": "upload-16m",
+      "size_bytes": 16777216,
+      "concurrency": 16,
+      "repetition": 1,
+      "order": [
+        "python",
+        "go"
+      ],
+      "namespace": "ec03f785-eb6f-5f74-b0d6-607ea27f261e"
+    },
+    {
+      "pair_id": "upload-16m-c16-r02",
+      "scenario": "upload-16m",
+      "size_bytes": 16777216,
+      "concurrency": 16,
+      "repetition": 2,
+      "order": [
+        "python",
+        "go"
+      ],
+      "namespace": "3c485f1f-cc11-509e-bff2-1b8a42c789c6"
+    },
+    {
+      "pair_id": "upload-16m-c16-r03",
+      "scenario": "upload-16m",
+      "size_bytes": 16777216,
+      "concurrency": 16,
+      "repetition": 3,
+      "order": [
+        "python",
+        "go"
+      ],
+      "namespace": "11a12cc2-0627-5343-9f22-c06bdc9165e0"
+    },
+    {
+      "pair_id": "upload-64m-c01-r01",
+      "scenario": "upload-64m",
+      "size_bytes": 67108864,
+      "concurrency": 1,
+      "repetition": 1,
+      "order": [
+        "python",
+        "go"
+      ],
+      "namespace": "bda7144b-f51f-565a-a9cf-9c7f05e49cdf"
+    },
+    {
+      "pair_id": "upload-64m-c01-r02",
+      "scenario": "upload-64m",
+      "size_bytes": 67108864,
+      "concurrency": 1,
+      "repetition": 2,
+      "order": [
+        "python",
+        "go"
+      ],
+      "namespace": "4ee85f39-5723-57f9-a35a-a863fc920c03"
+    },
+    {
+      "pair_id": "upload-64m-c01-r03",
+      "scenario": "upload-64m",
+      "size_bytes": 67108864,
+      "concurrency": 1,
+      "repetition": 3,
+      "order": [
+        "python",
+        "go"
+      ],
+      "namespace": "bddacd25-6314-5848-b5da-9341e515979e"
+    },
+    {
+      "pair_id": "upload-64m-c16-r01",
+      "scenario": "upload-64m",
+      "size_bytes": 67108864,
+      "concurrency": 16,
+      "repetition": 1,
+      "order": [
+        "python",
+        "go"
+      ],
+      "namespace": "636effd6-891f-5ae5-9e21-221221d8b288"
+    },
+    {
+      "pair_id": "upload-64m-c16-r02",
+      "scenario": "upload-64m",
+      "size_bytes": 67108864,
+      "concurrency": 16,
+      "repetition": 2,
+      "order": [
+        "go",
+        "python"
+      ],
+      "namespace": "c76a1a63-4397-57a9-ae56-199006edad5b"
+    },
+    {
+      "pair_id": "upload-64m-c16-r03",
+      "scenario": "upload-64m",
+      "size_bytes": 67108864,
+      "concurrency": 16,
+      "repetition": 3,
+      "order": [
+        "python",
+        "go"
+      ],
+      "namespace": "135c002b-554c-5f59-bf00-82806c85cee6"
+    },
+    {
+      "pair_id": "download-1m-c01-r01",
+      "scenario": "download-1m",
+      "size_bytes": 1048576,
+      "concurrency": 1,
+      "repetition": 1,
+      "order": [
+        "go",
+        "python"
+      ],
+      "namespace": "9d098e41-4136-5e1b-834e-3ea27a9bea0f"
+    },
+    {
+      "pair_id": "download-1m-c01-r02",
+      "scenario": "download-1m",
+      "size_bytes": 1048576,
+      "concurrency": 1,
+      "repetition": 2,
+      "order": [
+        "go",
+        "python"
+      ],
+      "namespace": "e499c8c9-bc4d-50f5-aa35-7fa9a20c79ed"
+    },
+    {
+      "pair_id": "download-1m-c01-r03",
+      "scenario": "download-1m",
+      "size_bytes": 1048576,
+      "concurrency": 1,
+      "repetition": 3,
+      "order": [
+        "python",
+        "go"
+      ],
+      "namespace": "4a37caa2-c29c-598c-b442-6d365c4d3604"
+    },
+    {
+      "pair_id": "download-1m-c16-r01",
+      "scenario": "download-1m",
+      "size_bytes": 1048576,
+      "concurrency": 16,
+      "repetition": 1,
+      "order": [
+        "go",
+        "python"
+      ],
+      "namespace": "e91e01d8-9d9c-5c2a-ac9b-92348259f82a"
+    },
+    {
+      "pair_id": "download-1m-c16-r02",
+      "scenario": "download-1m",
+      "size_bytes": 1048576,
+      "concurrency": 16,
+      "repetition": 2,
+      "order": [
+        "python",
+        "go"
+      ],
+      "namespace": "45606708-3383-5597-b8a9-338002bd5110"
+    },
+    {
+      "pair_id": "download-1m-c16-r03",
+      "scenario": "download-1m",
+      "size_bytes": 1048576,
+      "concurrency": 16,
+      "repetition": 3,
+      "order": [
+        "python",
+        "go"
+      ],
+      "namespace": "67d82066-e4be-578e-8a46-616fe96e7989"
+    },
+    {
+      "pair_id": "download-16m-c01-r01",
+      "scenario": "download-16m",
+      "size_bytes": 16777216,
+      "concurrency": 1,
+      "repetition": 1,
+      "order": [
+        "go",
+        "python"
+      ],
+      "namespace": "02cbf0cc-00f2-5188-a7aa-d1e011f3bd88"
+    },
+    {
+      "pair_id": "download-16m-c01-r02",
+      "scenario": "download-16m",
+      "size_bytes": 16777216,
+      "concurrency": 1,
+      "repetition": 2,
+      "order": [
+        "go",
+        "python"
+      ],
+      "namespace": "28a507a1-1049-5867-b6c9-24f8187229d8"
+    },
+    {
+      "pair_id": "download-16m-c01-r03",
+      "scenario": "download-16m",
+      "size_bytes": 16777216,
+      "concurrency": 1,
+      "repetition": 3,
+      "order": [
+        "go",
+        "python"
+      ],
+      "namespace": "c930e07b-d031-514c-8f6c-6f766c2c6310"
+    },
+    {
+      "pair_id": "download-16m-c16-r01",
+      "scenario": "download-16m",
+      "size_bytes": 16777216,
+      "concurrency": 16,
+      "repetition": 1,
+      "order": [
+        "go",
+        "python"
+      ],
+      "namespace": "ca671960-ffee-5e0c-9a75-0b70c6aea45f"
+    },
+    {
+      "pair_id": "download-16m-c16-r02",
+      "scenario": "download-16m",
+      "size_bytes": 16777216,
+      "concurrency": 16,
+      "repetition": 2,
+      "order": [
+        "go",
+        "python"
+      ],
+      "namespace": "04b2e893-d20d-599c-89cc-becc1983f129"
+    },
+    {
+      "pair_id": "download-16m-c16-r03",
+      "scenario": "download-16m",
+      "size_bytes": 16777216,
+      "concurrency": 16,
+      "repetition": 3,
+      "order": [
+        "go",
+        "python"
+      ],
+      "namespace": "e8cc0961-64c9-5be2-bcc0-6c4ae3073d1b"
+    },
+    {
+      "pair_id": "download-64m-c01-r01",
+      "scenario": "download-64m",
+      "size_bytes": 67108864,
+      "concurrency": 1,
+      "repetition": 1,
+      "order": [
+        "go",
+        "python"
+      ],
+      "namespace": "cb7912f2-3017-52f2-b171-9f438f60fd9d"
+    },
+    {
+      "pair_id": "download-64m-c01-r02",
+      "scenario": "download-64m",
+      "size_bytes": 67108864,
+      "concurrency": 1,
+      "repetition": 2,
+      "order": [
+        "go",
+        "python"
+      ],
+      "namespace": "45943ead-7be2-55df-8b30-797059a6877b"
+    },
+    {
+      "pair_id": "download-64m-c01-r03",
+      "scenario": "download-64m",
+      "size_bytes": 67108864,
+      "concurrency": 1,
+      "repetition": 3,
+      "order": [
+        "go",
+        "python"
+      ],
+      "namespace": "78451ff5-f88e-5c6a-bc67-32dc4cec7346"
+    },
+    {
+      "pair_id": "download-64m-c16-r01",
+      "scenario": "download-64m",
+      "size_bytes": 67108864,
+      "concurrency": 16,
+      "repetition": 1,
+      "order": [
+        "go",
+        "python"
+      ],
+      "namespace": "2276e53d-8db4-560d-b3d4-a1092dd65518"
+    },
+    {
+      "pair_id": "download-64m-c16-r02",
+      "scenario": "download-64m",
+      "size_bytes": 67108864,
+      "concurrency": 16,
+      "repetition": 2,
+      "order": [
+        "go",
+        "python"
+      ],
+      "namespace": "1f30a578-cef2-580f-85b9-862545f1cd07"
+    },
+    {
+      "pair_id": "download-64m-c16-r03",
+      "scenario": "download-64m",
+      "size_bytes": 67108864,
+      "concurrency": 16,
+      "repetition": 3,
+      "order": [
+        "go",
+        "python"
+      ],
+      "namespace": "3f8a00be-0b3e-5586-9227-c12fa66e5988"
+    },
+    {
+      "pair_id": "import-direct-16m-c01-r01",
+      "scenario": "import-direct-16m",
+      "size_bytes": 16777216,
+      "concurrency": 1,
+      "repetition": 1,
+      "order": [
+        "python",
+        "go"
+      ],
+      "namespace": "4b06a577-617a-5962-969c-f21b95e6333b"
+    },
+    {
+      "pair_id": "import-direct-16m-c01-r02",
+      "scenario": "import-direct-16m",
+      "size_bytes": 16777216,
+      "concurrency": 1,
+      "repetition": 2,
+      "order": [
+        "python",
+        "go"
+      ],
+      "namespace": "595ab2c7-4818-5d7e-81a3-065baacdbf7a"
+    },
+    {
+      "pair_id": "import-direct-16m-c01-r03",
+      "scenario": "import-direct-16m",
+      "size_bytes": 16777216,
+      "concurrency": 1,
+      "repetition": 3,
+      "order": [
+        "go",
+        "python"
+      ],
+      "namespace": "6f9871e0-395b-5995-8dcf-1cc1852ae567"
+    },
+    {
+      "pair_id": "import-direct-16m-c16-r01",
+      "scenario": "import-direct-16m",
+      "size_bytes": 16777216,
+      "concurrency": 16,
+      "repetition": 1,
+      "order": [
+        "go",
+        "python"
+      ],
+      "namespace": "60e297b5-5b61-5435-b4ea-0bb5abb7f62e"
+    },
+    {
+      "pair_id": "import-direct-16m-c16-r02",
+      "scenario": "import-direct-16m",
+      "size_bytes": 16777216,
+      "concurrency": 16,
+      "repetition": 2,
+      "order": [
+        "python",
+        "go"
+      ],
+      "namespace": "a37e6529-425b-5ca2-89ef-3277c197c763"
+    },
+    {
+      "pair_id": "import-direct-16m-c16-r03",
+      "scenario": "import-direct-16m",
+      "size_bytes": 16777216,
+      "concurrency": 16,
+      "repetition": 3,
+      "order": [
+        "go",
+        "python"
+      ],
+      "namespace": "bc0151ac-c17a-5d1e-a49a-069543f38468"
+    },
+    {
+      "pair_id": "upload-qcow2-c01-r01",
+      "scenario": "upload-qcow2",
+      "size_bytes": null,
+      "concurrency": 1,
+      "repetition": 1,
+      "order": [
+        "go",
+        "python"
+      ],
+      "namespace": "ca7a01bc-98d9-5c6a-a50d-c9aa64282873"
+    },
+    {
+      "pair_id": "upload-qcow2-c01-r02",
+      "scenario": "upload-qcow2",
+      "size_bytes": null,
+      "concurrency": 1,
+      "repetition": 2,
+      "order": [
+        "python",
+        "go"
+      ],
+      "namespace": "68becfdf-0da9-526a-8e75-ad7111835d2c"
+    },
+    {
+      "pair_id": "upload-qcow2-c01-r03",
+      "scenario": "upload-qcow2",
+      "size_bytes": null,
+      "concurrency": 1,
+      "repetition": 3,
+      "order": [
+        "python",
+        "go"
+      ],
+      "namespace": "4456aa66-6995-5d06-93ef-af299f831c97"
+    },
+    {
+      "pair_id": "upload-qcow2-c16-r01",
+      "scenario": "upload-qcow2",
+      "size_bytes": null,
+      "concurrency": 16,
+      "repetition": 1,
+      "order": [
+        "go",
+        "python"
+      ],
+      "namespace": "b821f319-f569-5f18-a336-3b0d6419081f"
+    },
+    {
+      "pair_id": "upload-qcow2-c16-r02",
+      "scenario": "upload-qcow2",
+      "size_bytes": null,
+      "concurrency": 16,
+      "repetition": 2,
+      "order": [
+        "go",
+        "python"
+      ],
+      "namespace": "94064961-715c-549e-9aed-8bf9dfdd756d"
+    },
+    {
+      "pair_id": "upload-qcow2-c16-r03",
+      "scenario": "upload-qcow2",
+      "size_bytes": null,
+      "concurrency": 16,
+      "repetition": 3,
+      "order": [
+        "python",
+        "go"
+      ],
+      "namespace": "14b7982d-cf67-5449-9b7a-27887b7eee99"
+    },
+    {
+      "pair_id": "nova-mix-c01-r01",
+      "scenario": "nova-mix",
+      "size_bytes": 16777216,
+      "concurrency": 1,
+      "repetition": 1,
+      "order": [
+        "go",
+        "python"
+      ],
+      "namespace": "f934e063-3e9e-597a-85ef-c731031d1b75"
+    },
+    {
+      "pair_id": "nova-mix-c01-r02",
+      "scenario": "nova-mix",
+      "size_bytes": 16777216,
+      "concurrency": 1,
+      "repetition": 2,
+      "order": [
+        "go",
+        "python"
+      ],
+      "namespace": "27130972-cc71-5dc4-a914-845164d8ffd3"
+    },
+    {
+      "pair_id": "nova-mix-c01-r03",
+      "scenario": "nova-mix",
+      "size_bytes": 16777216,
+      "concurrency": 1,
+      "repetition": 3,
+      "order": [
+        "python",
+        "go"
+      ],
+      "namespace": "33793152-deb2-5c77-942d-418d18cb3476"
+    },
+    {
+      "pair_id": "nova-mix-c16-r01",
+      "scenario": "nova-mix",
+      "size_bytes": 16777216,
+      "concurrency": 16,
+      "repetition": 1,
+      "order": [
+        "go",
+        "python"
+      ],
+      "namespace": "8234588a-574f-5c65-abe0-53231cc6d743"
+    },
+    {
+      "pair_id": "nova-mix-c16-r02",
+      "scenario": "nova-mix",
+      "size_bytes": 16777216,
+      "concurrency": 16,
+      "repetition": 2,
+      "order": [
+        "go",
+        "python"
+      ],
+      "namespace": "8b26cddd-42e9-5acb-9d3d-da1d816b1ff2"
+    },
+    {
+      "pair_id": "nova-mix-c16-r03",
+      "scenario": "nova-mix",
+      "size_bytes": 16777216,
+      "concurrency": 16,
+      "repetition": 3,
+      "order": [
+        "go",
+        "python"
+      ],
+      "namespace": "b213ebea-64e7-5e86-acbd-2c903eef470e"
+    }
+  ],
+  "runs": [
+    {
+      "run_id": "catalog-list-c01-r01-python",
+      "valid": true
+    },
+    {
+      "run_id": "catalog-list-c01-r01-go",
+      "valid": true
+    },
+    {
+      "run_id": "catalog-list-c01-r02-go",
+      "valid": true
+    },
+    {
+      "run_id": "catalog-list-c01-r02-python",
+      "valid": true
+    },
+    {
+      "run_id": "catalog-list-c01-r03-python",
+      "valid": true
+    },
+    {
+      "run_id": "catalog-list-c01-r03-go",
+      "valid": true
+    },
+    {
+      "run_id": "catalog-list-c16-r01-go",
+      "valid": true
+    },
+    {
+      "run_id": "catalog-list-c16-r01-python",
+      "valid": true
+    },
+    {
+      "run_id": "catalog-list-c16-r02-go",
+      "valid": true
+    },
+    {
+      "run_id": "catalog-list-c16-r02-python",
+      "valid": true
+    },
+    {
+      "run_id": "catalog-list-c16-r03-go",
+      "valid": true
+    },
+    {
+      "run_id": "catalog-list-c16-r03-python",
+      "valid": true
+    },
+    {
+      "run_id": "catalog-show-c01-r01-go",
+      "valid": true
+    },
+    {
+      "run_id": "catalog-show-c01-r01-python",
+      "valid": true
+    },
+    {
+      "run_id": "catalog-show-c01-r02-python",
+      "valid": true
+    },
+    {
+      "run_id": "catalog-show-c01-r02-go",
+      "valid": true
+    },
+    {
+      "run_id": "catalog-show-c01-r03-go",
+      "valid": true
+    },
+    {
+      "run_id": "catalog-show-c01-r03-python",
+      "valid": true
+    },
+    {
+      "run_id": "catalog-show-c16-r01-go",
+      "valid": true
+    },
+    {
+      "run_id": "catalog-show-c16-r01-python",
+      "valid": true
+    },
+    {
+      "run_id": "catalog-show-c16-r02-go",
+      "valid": true
+    },
+    {
+      "run_id": "catalog-show-c16-r02-python",
+      "valid": true
+    },
+    {
+      "run_id": "catalog-show-c16-r03-go",
+      "valid": true
+    },
+    {
+      "run_id": "catalog-show-c16-r03-python",
+      "valid": true
+    },
+    {
+      "run_id": "catalog-lifecycle-c01-r01-python",
+      "valid": true
+    },
+    {
+      "run_id": "catalog-lifecycle-c01-r01-go",
+      "valid": true
+    },
+    {
+      "run_id": "catalog-lifecycle-c01-r02-go",
+      "valid": true
+    },
+    {
+      "run_id": "catalog-lifecycle-c01-r02-python",
+      "valid": true
+    },
+    {
+      "run_id": "catalog-lifecycle-c01-r03-go",
+      "valid": true
+    },
+    {
+      "run_id": "catalog-lifecycle-c01-r03-python",
+      "valid": true
+    },
+    {
+      "run_id": "catalog-lifecycle-c16-r01-go",
+      "valid": true
+    },
+    {
+      "run_id": "catalog-lifecycle-c16-r01-python",
+      "valid": true
+    },
+    {
+      "run_id": "catalog-lifecycle-c16-r02-python",
+      "valid": true
+    },
+    {
+      "run_id": "catalog-lifecycle-c16-r02-go",
+      "valid": true
+    },
+    {
+      "run_id": "catalog-lifecycle-c16-r03-go",
+      "valid": true
+    },
+    {
+      "run_id": "catalog-lifecycle-c16-r03-python",
+      "valid": true
+    },
+    {
+      "run_id": "upload-1m-c01-r01-python",
+      "valid": true
+    },
+    {
+      "run_id": "upload-1m-c01-r01-go",
+      "valid": true
+    },
+    {
+      "run_id": "upload-1m-c01-r02-python",
+      "valid": true
+    },
+    {
+      "run_id": "upload-1m-c01-r02-go",
+      "valid": true
+    },
+    {
+      "run_id": "upload-1m-c01-r03-go",
+      "valid": true
+    },
+    {
+      "run_id": "upload-1m-c01-r03-python",
+      "valid": true
+    },
+    {
+      "run_id": "upload-1m-c16-r01-go",
+      "valid": true
+    },
+    {
+      "run_id": "upload-1m-c16-r01-python",
+      "valid": true
+    },
+    {
+      "run_id": "upload-1m-c16-r02-go",
+      "valid": true
+    },
+    {
+      "run_id": "upload-1m-c16-r02-python",
+      "valid": true
+    },
+    {
+      "run_id": "upload-1m-c16-r03-python",
+      "valid": true
+    },
+    {
+      "run_id": "upload-1m-c16-r03-go",
+      "valid": true
+    },
+    {
+      "run_id": "upload-16m-c01-r01-go",
+      "valid": true
+    },
+    {
+      "run_id": "upload-16m-c01-r01-python",
+      "valid": true
+    },
+    {
+      "run_id": "upload-16m-c01-r02-python",
+      "valid": true
+    },
+    {
+      "run_id": "upload-16m-c01-r02-go",
+      "valid": true
+    },
+    {
+      "run_id": "upload-16m-c01-r03-python",
+      "valid": true
+    },
+    {
+      "run_id": "upload-16m-c01-r03-go",
+      "valid": true
+    },
+    {
+      "run_id": "upload-16m-c16-r01-python",
+      "valid": true
+    },
+    {
+      "run_id": "upload-16m-c16-r01-go",
+      "valid": true
+    },
+    {
+      "run_id": "upload-16m-c16-r02-python",
+      "valid": true
+    },
+    {
+      "run_id": "upload-16m-c16-r02-go",
+      "valid": true
+    },
+    {
+      "run_id": "upload-16m-c16-r03-python",
+      "valid": true
+    },
+    {
+      "run_id": "upload-16m-c16-r03-go",
+      "valid": true
+    },
+    {
+      "run_id": "upload-64m-c01-r01-python",
+      "valid": true
+    },
+    {
+      "run_id": "upload-64m-c01-r01-go",
+      "valid": true
+    },
+    {
+      "run_id": "upload-64m-c01-r02-python",
+      "valid": true
+    },
+    {
+      "run_id": "upload-64m-c01-r02-go",
+      "valid": true
+    },
+    {
+      "run_id": "upload-64m-c01-r03-python",
+      "valid": true
+    },
+    {
+      "run_id": "upload-64m-c01-r03-go",
+      "valid": true
+    },
+    {
+      "run_id": "upload-64m-c16-r01-python",
+      "valid": true
+    },
+    {
+      "run_id": "upload-64m-c16-r01-go",
+      "valid": true
+    },
+    {
+      "run_id": "upload-64m-c16-r02-go",
+      "valid": true
+    },
+    {
+      "run_id": "upload-64m-c16-r02-python",
+      "valid": true
+    },
+    {
+      "run_id": "upload-64m-c16-r03-python",
+      "valid": true
+    },
+    {
+      "run_id": "upload-64m-c16-r03-go",
+      "valid": true
+    },
+    {
+      "run_id": "download-1m-c01-r01-go",
+      "valid": true
+    },
+    {
+      "run_id": "download-1m-c01-r01-python",
+      "valid": true
+    },
+    {
+      "run_id": "download-1m-c01-r02-go",
+      "valid": true
+    },
+    {
+      "run_id": "download-1m-c01-r02-python",
+      "valid": true
+    },
+    {
+      "run_id": "download-1m-c01-r03-python",
+      "valid": true
+    },
+    {
+      "run_id": "download-1m-c01-r03-go",
+      "valid": true
+    },
+    {
+      "run_id": "download-1m-c16-r01-go",
+      "valid": true
+    },
+    {
+      "run_id": "download-1m-c16-r01-python",
+      "valid": true
+    },
+    {
+      "run_id": "download-1m-c16-r02-python",
+      "valid": true
+    },
+    {
+      "run_id": "download-1m-c16-r02-go",
+      "valid": true
+    },
+    {
+      "run_id": "download-1m-c16-r03-python",
+      "valid": true
+    },
+    {
+      "run_id": "download-1m-c16-r03-go",
+      "valid": true
+    },
+    {
+      "run_id": "download-16m-c01-r01-go",
+      "valid": true
+    },
+    {
+      "run_id": "download-16m-c01-r01-python",
+      "valid": true
+    },
+    {
+      "run_id": "download-16m-c01-r02-go",
+      "valid": true
+    },
+    {
+      "run_id": "download-16m-c01-r02-python",
+      "valid": true
+    },
+    {
+      "run_id": "download-16m-c01-r03-go",
+      "valid": true
+    },
+    {
+      "run_id": "download-16m-c01-r03-python",
+      "valid": true
+    },
+    {
+      "run_id": "download-16m-c16-r01-go",
+      "valid": true
+    },
+    {
+      "run_id": "download-16m-c16-r01-python",
+      "valid": true
+    },
+    {
+      "run_id": "download-16m-c16-r02-go",
+      "valid": true
+    },
+    {
+      "run_id": "download-16m-c16-r02-python",
+      "valid": true
+    },
+    {
+      "run_id": "download-16m-c16-r03-go",
+      "valid": true
+    },
+    {
+      "run_id": "download-16m-c16-r03-python",
+      "valid": true
+    },
+    {
+      "run_id": "download-64m-c01-r01-go",
+      "valid": true
+    },
+    {
+      "run_id": "download-64m-c01-r01-python",
+      "valid": true
+    },
+    {
+      "run_id": "download-64m-c01-r02-go",
+      "valid": true
+    },
+    {
+      "run_id": "download-64m-c01-r02-python",
+      "valid": true
+    },
+    {
+      "run_id": "download-64m-c01-r03-go",
+      "valid": true
+    },
+    {
+      "run_id": "download-64m-c01-r03-python",
+      "valid": true
+    },
+    {
+      "run_id": "download-64m-c16-r01-go",
+      "valid": true
+    },
+    {
+      "run_id": "download-64m-c16-r01-python",
+      "valid": true
+    },
+    {
+      "run_id": "download-64m-c16-r02-go",
+      "valid": true
+    },
+    {
+      "run_id": "download-64m-c16-r02-python",
+      "valid": true
+    },
+    {
+      "run_id": "download-64m-c16-r03-go",
+      "valid": true
+    },
+    {
+      "run_id": "download-64m-c16-r03-python",
+      "valid": true
+    },
+    {
+      "run_id": "import-direct-16m-c01-r01-python",
+      "valid": true
+    },
+    {
+      "run_id": "import-direct-16m-c01-r01-go",
+      "valid": true
+    },
+    {
+      "run_id": "import-direct-16m-c01-r02-python",
+      "valid": true
+    },
+    {
+      "run_id": "import-direct-16m-c01-r02-go",
+      "valid": true
+    },
+    {
+      "run_id": "import-direct-16m-c01-r03-go",
+      "valid": true
+    },
+    {
+      "run_id": "import-direct-16m-c01-r03-python",
+      "valid": true
+    },
+    {
+      "run_id": "import-direct-16m-c16-r01-go",
+      "valid": true
+    },
+    {
+      "run_id": "import-direct-16m-c16-r01-python",
+      "valid": true
+    },
+    {
+      "run_id": "import-direct-16m-c16-r02-python",
+      "valid": true
+    },
+    {
+      "run_id": "import-direct-16m-c16-r02-go",
+      "valid": true
+    },
+    {
+      "run_id": "import-direct-16m-c16-r03-go",
+      "valid": true
+    },
+    {
+      "run_id": "import-direct-16m-c16-r03-python",
+      "valid": true
+    },
+    {
+      "run_id": "upload-qcow2-c01-r01-go",
+      "valid": true
+    },
+    {
+      "run_id": "upload-qcow2-c01-r01-python",
+      "valid": true
+    },
+    {
+      "run_id": "upload-qcow2-c01-r02-python",
+      "valid": true
+    },
+    {
+      "run_id": "upload-qcow2-c01-r02-go",
+      "valid": true
+    },
+    {
+      "run_id": "upload-qcow2-c01-r03-python",
+      "valid": true
+    },
+    {
+      "run_id": "upload-qcow2-c01-r03-go",
+      "valid": true
+    },
+    {
+      "run_id": "upload-qcow2-c16-r01-go",
+      "valid": true
+    },
+    {
+      "run_id": "upload-qcow2-c16-r01-python",
+      "valid": true
+    },
+    {
+      "run_id": "upload-qcow2-c16-r02-go",
+      "valid": true
+    },
+    {
+      "run_id": "upload-qcow2-c16-r02-python",
+      "valid": true
+    },
+    {
+      "run_id": "upload-qcow2-c16-r03-python",
+      "valid": true
+    },
+    {
+      "run_id": "upload-qcow2-c16-r03-go",
+      "valid": true
+    },
+    {
+      "run_id": "nova-mix-c01-r01-go",
+      "valid": true
+    },
+    {
+      "run_id": "nova-mix-c01-r01-python",
+      "valid": true
+    },
+    {
+      "run_id": "nova-mix-c01-r02-go",
+      "valid": true
+    },
+    {
+      "run_id": "nova-mix-c01-r02-python",
+      "valid": true
+    },
+    {
+      "run_id": "nova-mix-c01-r03-python",
+      "valid": true
+    },
+    {
+      "run_id": "nova-mix-c01-r03-go",
+      "valid": true
+    },
+    {
+      "run_id": "nova-mix-c16-r01-go",
+      "valid": true
+    },
+    {
+      "run_id": "nova-mix-c16-r01-python",
+      "valid": true
+    },
+    {
+      "run_id": "nova-mix-c16-r02-go",
+      "valid": true
+    },
+    {
+      "run_id": "nova-mix-c16-r02-python",
+      "valid": true
+    },
+    {
+      "run_id": "nova-mix-c16-r03-go",
+      "valid": true
+    },
+    {
+      "run_id": "nova-mix-c16-r03-python",
+      "valid": true
+    }
+  ],
+  "valid": true,
+  "cleanup": true,
+  "cleanup_report": {
+    "original_unchanged": true,
+    "private_root_removed": true,
+    "runtime_removed": true,
+    "identity_removed": true,
+    "controls_restored": true,
+    "original_services_active": {
+      "devstack@placement-api.service": true,
+      "devstack@g-api.service": true,
+      "devstack@n-cpu.service": true,
+      "devstack@n-sch.service": true,
+      "devstack@keystone.service": true
+    },
+    "pending_images": 0
+  },
+  "finished_utc": "2026-11-23T17:43:05.027353+00:00"
+}

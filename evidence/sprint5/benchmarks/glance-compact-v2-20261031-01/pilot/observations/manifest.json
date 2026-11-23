@@ -1,0 +1,522 @@
+{
+  "schema": 1,
+  "campaign_id": "c2f2a04a-8876-418b-9033-59b4e0faed59",
+  "stage": "pilot",
+  "started_utc": "2026-10-31T16:19:35.514780+00:00",
+  "protocol": {
+    "schema": 1,
+    "protocol": "glance-compact-v2",
+    "status": "prepared; requires pilot, explicit runner support and frozen manifest before measurement",
+    "scope": "Glance Python versus Glance Go; Placement Python remains control",
+    "implementations": [
+      "python",
+      "go"
+    ],
+    "concurrency": [
+      1,
+      16
+    ],
+    "repetitions": 3,
+    "warmup_s": 10,
+    "measurement_s": 30,
+    "metadata_request_timeout_s": 10,
+    "binary_request_timeout_s": 120,
+    "sampling_interval_s": 1,
+    "order_seed": 20261031,
+    "bootstrap_resamples": 10000,
+    "confidence": 0.95,
+    "load_model": "closed-loop",
+    "catalog_seed_count": 100,
+    "payload_sizes_bytes": [
+      1048576,
+      16777216,
+      67108864
+    ],
+    "scenarios": [
+      {
+        "id": "catalog-list",
+        "kind": "metadata"
+      },
+      {
+        "id": "catalog-show",
+        "kind": "metadata"
+      },
+      {
+        "id": "catalog-lifecycle",
+        "kind": "metadata"
+      },
+      {
+        "id": "upload-1m",
+        "kind": "upload-cycle",
+        "size_bytes": 1048576
+      },
+      {
+        "id": "upload-16m",
+        "kind": "upload-cycle",
+        "size_bytes": 16777216
+      },
+      {
+        "id": "upload-64m",
+        "kind": "upload-cycle",
+        "size_bytes": 67108864
+      },
+      {
+        "id": "download-1m",
+        "kind": "download",
+        "size_bytes": 1048576
+      },
+      {
+        "id": "download-16m",
+        "kind": "download",
+        "size_bytes": 16777216
+      },
+      {
+        "id": "download-64m",
+        "kind": "download",
+        "size_bytes": 67108864
+      }
+    ],
+    "required_official_windows": 108,
+    "minimum_free_disk_bytes": 8589934592,
+    "maximum_owned_store_bytes": 4294967296,
+    "transfer_admission_limit_go": 16,
+    "pilot": {
+      "concurrency": [
+        1,
+        16
+      ],
+      "repetitions": 1,
+      "warmup_s": 1,
+      "measurement_s": 4,
+      "required_windows": 36
+    },
+    "predecessor": "Placement B17/B18 accepted, original restored, lab released",
+    "acceptance": "All 108 windows valid for this reduced scope; hashes, lengths, state, resource sampling, cleanup and original restoration verified; no minimum speedup required",
+    "purpose": "Etapa 3 preliminary validation with reduced duration and declared coverage",
+    "host_free_minimum_bytes": 21474836480,
+    "log_policy": "Bound VM operational logs; rotate only outside measured windows, retain recent incident diagnostics and all benchmark samples",
+    "statistics": "Three independent paired repetitions; publish individual results, median and range, declare limited uncertainty; no claim of precise tail or statistical significance"
+  },
+  "protocol_sha256": "4e18c488cb041c73fb4aee1c50028ed7d4585681b48ea7c200c158430cf72a26",
+  "git_base": "80fcd1f5e8c3d20c9f165c472310c49d6b3f883c",
+  "source_sha256": {
+    "scripts/benchmarks/analyze_glance.py": "d2fd3d39b734775bbea753ad8e1fa11fbf19ee5530b75437dce84e4e243115dd",
+    "scripts/benchmarks/analyze_placement.py": "373793206df681e712d1e1e2113833d15db6fb7ad1032c5e99e6adbc4108f84f",
+    "scripts/benchmarks/campaign_protocol.py": "6533ba82a0656bdce05695c63b74475fc3814d0c16c4835e706f19b88dd341d0",
+    "scripts/benchmarks/complete_glance_campaign.py": "0dfaa3ce101ae54f58fd70bf0887f4dac85334c591ff57d53449492df8c52dad",
+    "scripts/benchmarks/complete_placement_campaign.py": "5040deda76262a3602574df841dcd2024b54e88a15cfdd6b3c9be3bfa0bcd965",
+    "scripts/benchmarks/glance_campaign.py": "498f5eabe001434803cdb6f913d3bb40f69326532adcb2c446c3f88c1d0fdc82",
+    "scripts/benchmarks/glance_http.py": "60371e010ecb5b4ceb41e4732d7aae7c7c5524d30d489b2196172da7aa5bbc11",
+    "scripts/benchmarks/glance_lab.py": "e3d9ff5a93fea166fe1f77242871861efb9a27056faa3fe53c5993d9c61768f6",
+    "scripts/benchmarks/glance_preflight.py": "b60106e5d78d72730aece9e814872529a853c5a9ba4548e879b422d8c7d0d46d",
+    "scripts/benchmarks/glance_window.py": "f227a6bb8506c67bc114fb9c95f6dc2fe5cde29b98c740a3183d6678e2809966",
+    "scripts/benchmarks/lab_controls.py": "a12bd2571181d47390aba6d7ffcdcd49dad7e1d2f3f52a97474f541f9ffc202e",
+    "scripts/benchmarks/placement_campaign.py": "87466ab10566e67c488d5fadd9ba268e5e29344134331c17332fc155fa501919",
+    "scripts/benchmarks/placement_http.py": "57657eebd44580f0989640cbdc1da20375e90cda943ae259974f3110f0ac0d7b",
+    "scripts/benchmarks/placement_lab.py": "6e91fe4a58e125b154a18af0e2799e38e945cf746aa79a07d518461e0b174220",
+    "scripts/benchmarks/placement_resources.py": "01499635ae258ebce4564bfc410148fce87adb3eb6816ea7fc2c932be85ebb25",
+    "scripts/benchmarks/placement_window.py": "8e990547c5fe07f0a5d5f9b802640c2d77d870d1928180be3d9d77ab106cdf3c",
+    "scripts/benchmarks/publish_placement_results.py": "6bf999f2f3a3a49e5af16d4558a2740a94104291f6154b51695815f0e8cf5ca8",
+    "scripts/benchmarks/sample_processes.py": "5a4252ba10ce1b2de3a37b479e4a7febe62f8ec8a0c7df31ae81b505dc16b72c",
+    "scripts/harness.py": "d69f4dcf67a939ff49b105b4de663b573575369844779ba712add3e837e9bf07",
+    "scripts/integration/glance_switch.py": "b9dbe2aac2c2ca6e8c0c0669ac4e3b3dd06bedadd475ad34222b643851c20990",
+    "scripts/integration/lab_identity.py": "cb154c88dca6e92f290e6f355b777731df020db7408b94af45c5024c8de6e58e",
+    "scripts/integration/nova_candidates_probe.py": "76779b23fbe4daaa7b1fce0240cca7601f41c446cd4bb2ae86ba0672d850c72d",
+    "scripts/integration/placement_boot.py": "04dd9e519c59905ccc9acfa5bccebb78fb8b8a603712d9b8b148b145ee8b6b1d",
+    "scripts/integration/placement_preflight.py": "8762c86e50a83176d579fbd9066571aca852a98dae9f996a766a575074d82ef8",
+    "scripts/integration/placement_runtime.py": "54f77abfdaeb5218e17c56ece461e5e7dd75771f7394f45e5b1a40c1cedede35",
+    "scripts/integration/placement_suite.py": "2fb35606ff1a9cce0c31f8d10a7d5a4d9167dce692d97895c9c0378cf3026e43",
+    "scripts/integration/placement_switch.py": "15fb15249795aa60901322f003ade5d308024ffb935688869905acb923d834e5",
+    "scripts/placement_allocation_differential.py": "50fa27a0b11876ff51e3d3729ab95a6bb259042866113a46d07f13de01361718",
+    "scripts/placement_auth_differential.py": "ef305eb0281c55ce54f665e8e6dcb2887924d51670fcc30594ac361d82b53bae",
+    "scripts/placement_candidates_differential.py": "bbd6fa5619f61c07b4db39d925944ef24f6639140b442ac8ff112559d13f9978",
+    "scripts/placement_catalog_differential.py": "86bedcf741459cd354248317b1c78763bcb39bf556c9508f574f280f7a773f88",
+    "scripts/placement_consumer_differential.py": "7bfb1eec496c5eebfb1863acd63e7179907a74dc39f8c39ade0037ff20e414a5",
+    "scripts/placement_differential.py": "8dbcdb3a2f3933e519c97e5cb2fcd771cdb6a56f064b31989ca6f1503b761490",
+    "scripts/placement_persistence_campaign.py": "dcbb4ba0a8922c02e66f1bec659e91b3bf0ab1fe413acb8d190002e1e98f5ad2",
+    "scripts/update_sprint2_excel.py": "892595fd509088694691f6739881aafe0e0b45d972cfc3692c26453228ff868a",
+    "scripts/verify_sprint2.py": "5382b445e2d59d817f4f068a68dc884e53a01b3b87bfd2ef0c570bc5c8461195"
+  },
+  "sequence": [
+    {
+      "pair_id": "catalog-list-c01-r01",
+      "scenario": "catalog-list",
+      "size_bytes": null,
+      "concurrency": 1,
+      "repetition": 1,
+      "order": [
+        "python",
+        "go"
+      ],
+      "namespace": "322d86be-5569-50de-83c0-ece48c8843b2"
+    },
+    {
+      "pair_id": "catalog-list-c16-r01",
+      "scenario": "catalog-list",
+      "size_bytes": null,
+      "concurrency": 16,
+      "repetition": 1,
+      "order": [
+        "go",
+        "python"
+      ],
+      "namespace": "198c1673-bbba-56c6-9602-cbfaf184926d"
+    },
+    {
+      "pair_id": "catalog-show-c01-r01",
+      "scenario": "catalog-show",
+      "size_bytes": null,
+      "concurrency": 1,
+      "repetition": 1,
+      "order": [
+        "python",
+        "go"
+      ],
+      "namespace": "cb594714-0bea-535d-82c2-b27419db7f73"
+    },
+    {
+      "pair_id": "catalog-show-c16-r01",
+      "scenario": "catalog-show",
+      "size_bytes": null,
+      "concurrency": 16,
+      "repetition": 1,
+      "order": [
+        "go",
+        "python"
+      ],
+      "namespace": "1dd20ab8-a0a7-5a99-95e7-fdc66a123d33"
+    },
+    {
+      "pair_id": "catalog-lifecycle-c01-r01",
+      "scenario": "catalog-lifecycle",
+      "size_bytes": null,
+      "concurrency": 1,
+      "repetition": 1,
+      "order": [
+        "go",
+        "python"
+      ],
+      "namespace": "a787a35c-5452-5210-8efa-b69abc5fa703"
+    },
+    {
+      "pair_id": "catalog-lifecycle-c16-r01",
+      "scenario": "catalog-lifecycle",
+      "size_bytes": null,
+      "concurrency": 16,
+      "repetition": 1,
+      "order": [
+        "go",
+        "python"
+      ],
+      "namespace": "f363c3a7-a219-5de3-8e7e-fac39db1ceb7"
+    },
+    {
+      "pair_id": "upload-1m-c01-r01",
+      "scenario": "upload-1m",
+      "size_bytes": 1048576,
+      "concurrency": 1,
+      "repetition": 1,
+      "order": [
+        "go",
+        "python"
+      ],
+      "namespace": "51d79456-91bd-5e97-9871-44b19e10c9dc"
+    },
+    {
+      "pair_id": "upload-1m-c16-r01",
+      "scenario": "upload-1m",
+      "size_bytes": 1048576,
+      "concurrency": 16,
+      "repetition": 1,
+      "order": [
+        "python",
+        "go"
+      ],
+      "namespace": "15300c5a-0d78-50fd-9a0c-47a6ffbd60bc"
+    },
+    {
+      "pair_id": "upload-16m-c01-r01",
+      "scenario": "upload-16m",
+      "size_bytes": 16777216,
+      "concurrency": 1,
+      "repetition": 1,
+      "order": [
+        "go",
+        "python"
+      ],
+      "namespace": "8f281b07-dcbd-5ed9-ba3a-2223a745d6b3"
+    },
+    {
+      "pair_id": "upload-16m-c16-r01",
+      "scenario": "upload-16m",
+      "size_bytes": 16777216,
+      "concurrency": 16,
+      "repetition": 1,
+      "order": [
+        "go",
+        "python"
+      ],
+      "namespace": "42bc5959-0cf5-5826-b9b7-410bccfcbe72"
+    },
+    {
+      "pair_id": "upload-64m-c01-r01",
+      "scenario": "upload-64m",
+      "size_bytes": 67108864,
+      "concurrency": 1,
+      "repetition": 1,
+      "order": [
+        "go",
+        "python"
+      ],
+      "namespace": "c9cdd271-dd6a-5a6c-a213-d77eef5c12a3"
+    },
+    {
+      "pair_id": "upload-64m-c16-r01",
+      "scenario": "upload-64m",
+      "size_bytes": 67108864,
+      "concurrency": 16,
+      "repetition": 1,
+      "order": [
+        "go",
+        "python"
+      ],
+      "namespace": "feb914db-7b3c-5749-bc65-e5c3d1417dbf"
+    },
+    {
+      "pair_id": "download-1m-c01-r01",
+      "scenario": "download-1m",
+      "size_bytes": 1048576,
+      "concurrency": 1,
+      "repetition": 1,
+      "order": [
+        "python",
+        "go"
+      ],
+      "namespace": "071a6a99-4ad4-5d0c-b092-87038c58e484"
+    },
+    {
+      "pair_id": "download-1m-c16-r01",
+      "scenario": "download-1m",
+      "size_bytes": 1048576,
+      "concurrency": 16,
+      "repetition": 1,
+      "order": [
+        "go",
+        "python"
+      ],
+      "namespace": "235be690-6a83-5fc1-9ae3-a2a7556b6b5f"
+    },
+    {
+      "pair_id": "download-16m-c01-r01",
+      "scenario": "download-16m",
+      "size_bytes": 16777216,
+      "concurrency": 1,
+      "repetition": 1,
+      "order": [
+        "go",
+        "python"
+      ],
+      "namespace": "392e026a-76bd-5b08-8768-707f4ce2745b"
+    },
+    {
+      "pair_id": "download-16m-c16-r01",
+      "scenario": "download-16m",
+      "size_bytes": 16777216,
+      "concurrency": 16,
+      "repetition": 1,
+      "order": [
+        "go",
+        "python"
+      ],
+      "namespace": "3d5f1f7c-fe58-51e9-8482-0a933ab0f361"
+    },
+    {
+      "pair_id": "download-64m-c01-r01",
+      "scenario": "download-64m",
+      "size_bytes": 67108864,
+      "concurrency": 1,
+      "repetition": 1,
+      "order": [
+        "python",
+        "go"
+      ],
+      "namespace": "82fde235-fc62-5685-ad7d-9fd7cc230ba0"
+    },
+    {
+      "pair_id": "download-64m-c16-r01",
+      "scenario": "download-64m",
+      "size_bytes": 67108864,
+      "concurrency": 16,
+      "repetition": 1,
+      "order": [
+        "go",
+        "python"
+      ],
+      "namespace": "e3d4baea-f561-58ae-a367-d0dced264d4e"
+    }
+  ],
+  "runs": [
+    {
+      "run_id": "catalog-list-c01-r01-python",
+      "valid": true
+    },
+    {
+      "run_id": "catalog-list-c01-r01-go",
+      "valid": true
+    },
+    {
+      "run_id": "catalog-list-c16-r01-go",
+      "valid": true
+    },
+    {
+      "run_id": "catalog-list-c16-r01-python",
+      "valid": true
+    },
+    {
+      "run_id": "catalog-show-c01-r01-python",
+      "valid": true
+    },
+    {
+      "run_id": "catalog-show-c01-r01-go",
+      "valid": true
+    },
+    {
+      "run_id": "catalog-show-c16-r01-go",
+      "valid": true
+    },
+    {
+      "run_id": "catalog-show-c16-r01-python",
+      "valid": true
+    },
+    {
+      "run_id": "catalog-lifecycle-c01-r01-go",
+      "valid": true
+    },
+    {
+      "run_id": "catalog-lifecycle-c01-r01-python",
+      "valid": true
+    },
+    {
+      "run_id": "catalog-lifecycle-c16-r01-go",
+      "valid": true
+    },
+    {
+      "run_id": "catalog-lifecycle-c16-r01-python",
+      "valid": true
+    },
+    {
+      "run_id": "upload-1m-c01-r01-go",
+      "valid": true
+    },
+    {
+      "run_id": "upload-1m-c01-r01-python",
+      "valid": true
+    },
+    {
+      "run_id": "upload-1m-c16-r01-python",
+      "valid": true
+    },
+    {
+      "run_id": "upload-1m-c16-r01-go",
+      "valid": true
+    },
+    {
+      "run_id": "upload-16m-c01-r01-go",
+      "valid": true
+    },
+    {
+      "run_id": "upload-16m-c01-r01-python",
+      "valid": true
+    },
+    {
+      "run_id": "upload-16m-c16-r01-go",
+      "valid": true
+    },
+    {
+      "run_id": "upload-16m-c16-r01-python",
+      "valid": true
+    },
+    {
+      "run_id": "upload-64m-c01-r01-go",
+      "valid": true
+    },
+    {
+      "run_id": "upload-64m-c01-r01-python",
+      "valid": true
+    },
+    {
+      "run_id": "upload-64m-c16-r01-go",
+      "valid": true
+    },
+    {
+      "run_id": "upload-64m-c16-r01-python",
+      "valid": true
+    },
+    {
+      "run_id": "download-1m-c01-r01-python",
+      "valid": true
+    },
+    {
+      "run_id": "download-1m-c01-r01-go",
+      "valid": true
+    },
+    {
+      "run_id": "download-1m-c16-r01-go",
+      "valid": true
+    },
+    {
+      "run_id": "download-1m-c16-r01-python",
+      "valid": true
+    },
+    {
+      "run_id": "download-16m-c01-r01-go",
+      "valid": true
+    },
+    {
+      "run_id": "download-16m-c01-r01-python",
+      "valid": true
+    },
+    {
+      "run_id": "download-16m-c16-r01-go",
+      "valid": true
+    },
+    {
+      "run_id": "download-16m-c16-r01-python",
+      "valid": true
+    },
+    {
+      "run_id": "download-64m-c01-r01-python",
+      "valid": true
+    },
+    {
+      "run_id": "download-64m-c01-r01-go",
+      "valid": true
+    },
+    {
+      "run_id": "download-64m-c16-r01-go",
+      "valid": true
+    },
+    {
+      "run_id": "download-64m-c16-r01-python",
+      "valid": true
+    }
+  ],
+  "valid": true,
+  "cleanup": true,
+  "cleanup_report": {
+    "original_unchanged": true,
+    "private_root_removed": true,
+    "runtime_removed": true,
+    "identity_removed": true,
+    "controls_restored": true,
+    "original_services_active": {
+      "devstack@placement-api.service": true,
+      "devstack@g-api.service": true,
+      "devstack@n-cpu.service": true,
+      "devstack@n-sch.service": true,
+      "devstack@keystone.service": true
+    },
+    "pending_images": 0
+  },
+  "finished_utc": "2026-10-31T16:33:41.579765+00:00"
+}

@@ -1,0 +1,210 @@
+{
+  "schema": 1,
+  "run_id": "catalog-list-c16-r01-go",
+  "scenario": "catalog-list",
+  "implementation": "go",
+  "concurrency": 16,
+  "planned_duration_s": 30,
+  "warmup_s": 10,
+  "load_model": "closed-loop; one cycle per worker",
+  "drain": "complete cycle started before deadline; denominator includes entire cycle drain",
+  "latency_boundary": "before send through complete response; validation/logging outside request latency",
+  "seed_scope": "selected metadata fields, image identity/state, complete payload bytes and hashes",
+  "valid": true,
+  "warmup": {
+    "start_utc": "2026-11-21T04:31:06.206060+00:00",
+    "end_utc": "2026-11-21T04:31:16.230130+00:00",
+    "elapsed_s": 10.024070433,
+    "requests": 3737,
+    "correct": 3737,
+    "errors": 0,
+    "cycles": 3737,
+    "correct_ops_s": 372.8026478841881,
+    "complete_cycles_s": 372.8026478841881,
+    "validated_payload_bytes": 0,
+    "validated_payload_mib_s": 0.0,
+    "latency_ms": {
+      "p50": 40.300162,
+      "p95": 67.734141,
+      "p99": 87.988413
+    },
+    "p99_tail_supported": true,
+    "failed": false
+  },
+  "measurement": {
+    "start_utc": "2026-11-21T04:31:16.236655+00:00",
+    "end_utc": "2026-11-21T04:31:46.263803+00:00",
+    "elapsed_s": 30.027148468,
+    "requests": 11134,
+    "correct": 11134,
+    "errors": 0,
+    "cycles": 11134,
+    "correct_ops_s": 370.79778027758874,
+    "complete_cycles_s": 370.79778027758874,
+    "validated_payload_bytes": 0,
+    "validated_payload_mib_s": 0.0,
+    "latency_ms": {
+      "p50": 40.838942,
+      "p95": 68.235479,
+      "p99": 83.790281
+    },
+    "p99_tail_supported": true,
+    "failed": false
+  },
+  "cleanup_errors": [],
+  "pending_images": [],
+  "cleanup_ok": true,
+  "external_abort": false,
+  "host_storage": {
+    "filesystem_path": "/var/lib/libvirt/images",
+    "minimum_required_bytes": 10737418240,
+    "minimum_observed_free_bytes": 41477455872,
+    "aborted": false,
+    "poll_interval_s": 2
+  },
+  "guest_storage": {
+    "samples": [
+      {
+        "free_bytes": 36332011520,
+        "store_bytes": 61,
+        "utc": "2026-11-21T04:31:06.203705+00:00"
+      },
+      {
+        "free_bytes": 36331347968,
+        "store_bytes": 61,
+        "utc": "2026-11-21T04:31:09.572932+00:00"
+      },
+      {
+        "free_bytes": 36355309568,
+        "store_bytes": 61,
+        "utc": "2026-11-21T04:31:13.311679+00:00"
+      },
+      {
+        "free_bytes": 36354621440,
+        "store_bytes": 61,
+        "utc": "2026-11-21T04:31:16.667897+00:00"
+      },
+      {
+        "free_bytes": 36353966080,
+        "store_bytes": 61,
+        "utc": "2026-11-21T04:31:20.034314+00:00"
+      },
+      {
+        "free_bytes": 36353306624,
+        "store_bytes": 61,
+        "utc": "2026-11-21T04:31:23.397843+00:00"
+      },
+      {
+        "free_bytes": 36352651264,
+        "store_bytes": 61,
+        "utc": "2026-11-21T04:31:26.751252+00:00"
+      },
+      {
+        "free_bytes": 36351995904,
+        "store_bytes": 61,
+        "utc": "2026-11-21T04:31:30.133182+00:00"
+      },
+      {
+        "free_bytes": 36351348736,
+        "store_bytes": 61,
+        "utc": "2026-11-21T04:31:33.490522+00:00"
+      },
+      {
+        "free_bytes": 36350685184,
+        "store_bytes": 61,
+        "utc": "2026-11-21T04:31:36.888471+00:00"
+      },
+      {
+        "free_bytes": 36341641216,
+        "store_bytes": 61,
+        "utc": "2026-11-21T04:31:40.248566+00:00"
+      },
+      {
+        "free_bytes": 36340994048,
+        "store_bytes": 61,
+        "utc": "2026-11-21T04:31:43.617481+00:00"
+      }
+    ],
+    "aborted": false
+  },
+  "generator_cpu_seconds": 24.140000000000025,
+  "generator_max_rss_bytes_process_lifetime": 38498304,
+  "host_load_average": {
+    "before": [
+      1.80224609375,
+      2.26953125,
+      2.2421875
+    ],
+    "after": [
+      2.9169921875,
+      2.501953125,
+      2.3232421875
+    ]
+  },
+  "clocks": {
+    "before": {
+      "best": {
+        "rtt_ns": 132024,
+        "remote_minus_host_ns": -653
+      },
+      "probes": [
+        {
+          "rtt_ns": 478164,
+          "remote_minus_host_ns": 85376
+        },
+        {
+          "rtt_ns": 194941,
+          "remote_minus_host_ns": 16359
+        },
+        {
+          "rtt_ns": 170705,
+          "remote_minus_host_ns": -19893
+        },
+        {
+          "rtt_ns": 153984,
+          "remote_minus_host_ns": 8263
+        },
+        {
+          "rtt_ns": 132024,
+          "remote_minus_host_ns": -653
+        }
+      ]
+    },
+    "after": {
+      "best": {
+        "rtt_ns": 187647,
+        "remote_minus_host_ns": -2731
+      },
+      "probes": [
+        {
+          "rtt_ns": 409477,
+          "remote_minus_host_ns": 42203
+        },
+        {
+          "rtt_ns": 271983,
+          "remote_minus_host_ns": 5655
+        },
+        {
+          "rtt_ns": 196052,
+          "remote_minus_host_ns": -13797
+        },
+        {
+          "rtt_ns": 228713,
+          "remote_minus_host_ns": -9137
+        },
+        {
+          "rtt_ns": 187647,
+          "remote_minus_host_ns": -2731
+        }
+      ]
+    }
+  },
+  "clock_drift_ns": 2078,
+  "clock_valid": true,
+  "post_state": {
+    "removed": true,
+    "seed_state_equal": true,
+    "roundtrip_after": null,
+    "own_tag_empty": true
+  }
+}

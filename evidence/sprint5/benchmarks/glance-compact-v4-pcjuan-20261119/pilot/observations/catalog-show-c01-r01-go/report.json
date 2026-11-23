@@ -1,0 +1,160 @@
+{
+  "schema": 1,
+  "run_id": "catalog-show-c01-r01-go",
+  "scenario": "catalog-show",
+  "implementation": "go",
+  "concurrency": 1,
+  "planned_duration_s": 4,
+  "warmup_s": 1,
+  "load_model": "closed-loop; one cycle per worker",
+  "drain": "complete cycle started before deadline; denominator includes entire cycle drain",
+  "latency_boundary": "before send through complete response; validation/logging outside request latency",
+  "seed_scope": "selected metadata fields, image identity/state, complete payload bytes and hashes",
+  "valid": true,
+  "warmup": {
+    "start_utc": "2026-11-19T18:57:50.322538+00:00",
+    "end_utc": "2026-11-19T18:57:51.323756+00:00",
+    "elapsed_s": 1.001217808,
+    "requests": 559,
+    "correct": 559,
+    "errors": 0,
+    "cycles": 559,
+    "correct_ops_s": 558.320073348116,
+    "complete_cycles_s": 558.320073348116,
+    "validated_payload_bytes": 0,
+    "validated_payload_mib_s": 0.0,
+    "latency_ms": {
+      "p50": 1.659527,
+      "p95": 1.962848,
+      "p99": 2.493179
+    },
+    "p99_tail_supported": false,
+    "failed": false
+  },
+  "measurement": {
+    "start_utc": "2026-11-19T18:57:51.327469+00:00",
+    "end_utc": "2026-11-19T18:57:55.328302+00:00",
+    "elapsed_s": 4.000833442,
+    "requests": 2251,
+    "correct": 2251,
+    "errors": 0,
+    "cycles": 2251,
+    "correct_ops_s": 562.6327695548191,
+    "complete_cycles_s": 562.6327695548191,
+    "validated_payload_bytes": 0,
+    "validated_payload_mib_s": 0.0,
+    "latency_ms": {
+      "p50": 1.661922,
+      "p95": 1.99602,
+      "p99": 2.874794
+    },
+    "p99_tail_supported": true,
+    "failed": false
+  },
+  "cleanup_errors": [],
+  "pending_images": [],
+  "cleanup_ok": true,
+  "external_abort": false,
+  "host_storage": {
+    "filesystem_path": "/var/lib/libvirt/images",
+    "minimum_required_bytes": 10737418240,
+    "minimum_observed_free_bytes": 40877621248,
+    "aborted": false,
+    "poll_interval_s": 2
+  },
+  "guest_storage": {
+    "samples": [
+      {
+        "free_bytes": 35068178432,
+        "store_bytes": 61,
+        "utc": "2026-11-19T18:57:50.321556+00:00"
+      },
+      {
+        "free_bytes": 35067363328,
+        "store_bytes": 61,
+        "utc": "2026-11-19T18:57:53.598542+00:00"
+      }
+    ],
+    "aborted": false
+  },
+  "generator_cpu_seconds": 1.06,
+  "generator_max_rss_bytes_process_lifetime": 38363136,
+  "host_load_average": {
+    "before": [
+      1.52783203125,
+      1.45556640625,
+      1.18115234375
+    ],
+    "after": [
+      1.60693359375,
+      1.4736328125,
+      1.1904296875
+    ]
+  },
+  "clocks": {
+    "before": {
+      "best": {
+        "rtt_ns": 105685,
+        "remote_minus_host_ns": -8005723
+      },
+      "probes": [
+        {
+          "rtt_ns": 452266,
+          "remote_minus_host_ns": -7958611
+        },
+        {
+          "rtt_ns": 199689,
+          "remote_minus_host_ns": -7992201
+        },
+        {
+          "rtt_ns": 129760,
+          "remote_minus_host_ns": -8003229
+        },
+        {
+          "rtt_ns": 112257,
+          "remote_minus_host_ns": -8005675
+        },
+        {
+          "rtt_ns": 105685,
+          "remote_minus_host_ns": -8005723
+        }
+      ]
+    },
+    "after": {
+      "best": {
+        "rtt_ns": 196002,
+        "remote_minus_host_ns": -7684566
+      },
+      "probes": [
+        {
+          "rtt_ns": 504292,
+          "remote_minus_host_ns": -7637076
+        },
+        {
+          "rtt_ns": 375695,
+          "remote_minus_host_ns": -7627116
+        },
+        {
+          "rtt_ns": 221770,
+          "remote_minus_host_ns": -7671452
+        },
+        {
+          "rtt_ns": 213435,
+          "remote_minus_host_ns": -7674642
+        },
+        {
+          "rtt_ns": 196002,
+          "remote_minus_host_ns": -7684566
+        }
+      ]
+    }
+  },
+  "clock_drift_ns": 321157,
+  "clock_valid": true,
+  "post_state": {
+    "removed": true,
+    "seed_state_equal": true,
+    "roundtrip_after": null,
+    "own_tag_empty": true
+  }
+}

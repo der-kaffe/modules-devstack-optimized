@@ -1,0 +1,86 @@
+{
+  "cases": [
+    {
+      "method": "GET",
+      "path": "/v2/images?tag=tt-glance-v2-fffdc8937b635c6782f6ef462a8a6131&limit=1000&sort=name%3Aasc",
+      "status": 200,
+      "expected": 200,
+      "bytes": 152,
+      "error_kind": null
+    },
+    {
+      "method": "GET",
+      "path": "/v2/images/b6fa0a7e-3dae-5dab-86d7-2afce9ad6dcd",
+      "status": 404,
+      "expected": 404,
+      "bytes": 155,
+      "error_kind": null
+    },
+    {
+      "method": "POST",
+      "path": "/v2/images",
+      "status": 201,
+      "expected": 201,
+      "bytes": 629,
+      "error_kind": null
+    },
+    {
+      "method": "PUT",
+      "path": "/v2/images/b6fa0a7e-3dae-5dab-86d7-2afce9ad6dcd/file",
+      "status": 204,
+      "expected": 204,
+      "bytes": 0,
+      "error_kind": null
+    },
+    {
+      "method": "GET",
+      "path": "/v2/images/b6fa0a7e-3dae-5dab-86d7-2afce9ad6dcd",
+      "status": 200,
+      "expected": 200,
+      "bytes": 797,
+      "error_kind": null
+    },
+    {
+      "method": "GET",
+      "path": "/v2/images/b6fa0a7e-3dae-5dab-86d7-2afce9ad6dcd/file",
+      "status": 200,
+      "expected": 200,
+      "bytes": 16777216,
+      "error_kind": null
+    },
+    {
+      "method": "GET",
+      "path": "/v2/images?tag=tt-glance-v2-fffdc8937b635c6782f6ef462a8a6131&limit=1000&sort=name%3Aasc",
+      "status": 200,
+      "expected": 200,
+      "bytes": 948,
+      "error_kind": null
+    },
+    {
+      "method": "DELETE",
+      "path": "/v2/images/b6fa0a7e-3dae-5dab-86d7-2afce9ad6dcd",
+      "status": 204,
+      "expected": 204,
+      "bytes": 0,
+      "error_kind": null
+    },
+    {
+      "method": "GET",
+      "path": "/v2/images/b6fa0a7e-3dae-5dab-86d7-2afce9ad6dcd",
+      "status": 404,
+      "expected": 404,
+      "bytes": 155,
+      "error_kind": null
+    },
+    {
+      "method": "GET",
+      "path": "/v2/images?tag=tt-glance-v2-fffdc8937b635c6782f6ef462a8a6131&limit=1000&sort=name%3Aasc",
+      "status": 200,
+      "expected": 200,
+      "bytes": 152,
+      "error_kind": null
+    }
+  ],
+  "roundtrip_after": null,
+  "owned_tag_empty": true
+}
